@@ -2,10 +2,13 @@ import json
 import asyncio
 import queue
 import threading
-from fastapi import FastAPI, Request
+import sys
+import subprocess
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pathlib import Path
+from pydantic import BaseModel
 from langchain_core.messages import AIMessage
 
 from agent.graph import agent as compiled_graph
@@ -137,6 +140,113 @@ async def generate(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+class ExecuteRequest(BaseModel):
+    code: str
+    language: str = "python"
+    extra_files: dict[str, str] = {}
+
+
+@app.post("/api/execute")
+async def execute_code(req: ExecuteRequest):
+    """Execute user-submitted code in a subprocess and return the output."""
+    import tempfile
+    import os
+    import shutil
+
+    lang = req.language.lower().strip()
+    code = req.code
+
+    interpreted = {
+        "python": {"ext": ".py", "cmd": lambda f: [sys.executable, f]},
+        "javascript": {"ext": ".js", "cmd": lambda f: ["node", f]},
+        "js": {"ext": ".js", "cmd": lambda f: ["node", f]},
+        "node": {"ext": ".js", "cmd": lambda f: ["node", f]},
+    }
+
+    compiled_langs = {"cpp", "c++", "c", "java"}
+    all_supported = list(interpreted.keys()) + list(compiled_langs)
+
+    if lang not in interpreted and lang not in compiled_langs:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language: '{lang}'. Supported: {', '.join(all_supported)}",
+        )
+
+    tmp_dir = None
+    tmp_file = None
+
+    try:
+        if lang in interpreted:
+            tmp_file = tempfile.NamedTemporaryFile(
+                mode="w", suffix=interpreted[lang]["ext"], delete=False, encoding="utf-8",
+            )
+            tmp_file.write(code)
+            tmp_file.close()
+
+            result = subprocess.run(
+                interpreted[lang]["cmd"](tmp_file.name),
+                capture_output=True, text=True, timeout=10,
+                cwd=tempfile.gettempdir(),
+            )
+            return {"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.returncode}
+
+        else:
+            tmp_dir = tempfile.mkdtemp(prefix="coderun_")
+            ext = ".cpp" if lang in ("cpp", "c++") else ".c" if lang == "c" else ".java"
+            compiler = "g++" if lang in ("cpp", "c++") else "gcc" if lang == "c" else "javac"
+
+            # Write extra files (headers, other sources)
+            for fname, fcode in req.extra_files.items():
+                basename = fname.split("/")[-1].split("\\")[-1]
+                with open(os.path.join(tmp_dir, basename), "w", encoding="utf-8") as f:
+                    f.write(fcode)
+
+            # Write main file
+            main_file = os.path.join(tmp_dir, f"main{ext}")
+            with open(main_file, "w", encoding="utf-8") as f:
+                f.write(code)
+
+            # Gather source files
+            if lang in ("cpp", "c++"):
+                src_files = [os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.endswith((".cpp", ".cc", ".cxx"))]
+            elif lang == "c":
+                src_files = [os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.endswith(".c")]
+            else:
+                src_files = [main_file]
+
+            out_name = os.path.join(tmp_dir, "program")
+            if sys.platform == "win32":
+                out_name += ".exe"
+
+            compile_cmd = [compiler, main_file] if lang == "java" else [compiler] + src_files + ["-o", out_name]
+
+            compile_result = subprocess.run(
+                compile_cmd, capture_output=True, text=True, timeout=15, cwd=tmp_dir,
+            )
+            if compile_result.returncode != 0:
+                return {"stdout": "", "stderr": f"Compilation failed:\n{compile_result.stderr}", "exit_code": compile_result.returncode}
+
+            if lang == "java":
+                run_cmd = ["java", "-cp", tmp_dir, os.path.splitext(os.path.basename(main_file))[0]]
+            else:
+                run_cmd = [out_name]
+
+            result = subprocess.run(run_cmd, capture_output=True, text=True, timeout=10, cwd=tmp_dir)
+            return {"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.returncode}
+
+    except subprocess.TimeoutExpired:
+        return {"stdout": "", "stderr": "⏱️ Execution timed out (10 second limit exceeded).", "exit_code": -1}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=f"Runtime/compiler not found for '{lang}'. ({e})")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")
+    finally:
+        if tmp_file and os.path.exists(tmp_file.name):
+            os.unlink(tmp_file.name)
+        if tmp_dir and os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # Mount static files AFTER defining routes so "/" isn't overridden

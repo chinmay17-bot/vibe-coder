@@ -6,9 +6,11 @@
 // --- STATE ---
 const state = {
     isGenerating: false,
+    isRunning: false,
     files: {},          // { filename: { code, language } }
     activeCodeFile: null,
     projectFiles: { html: '', css: '', js: '' },
+    editor: null,       // CodeMirror instance
 };
 
 // Agent metadata
@@ -33,14 +35,68 @@ const dom = {
     archDetails: document.getElementById('arch-details'),
     archContent: document.getElementById('arch-content'),
     codeFileTabs: document.getElementById('code-file-tabs'),
-    codeBlock: document.getElementById('code-block'),
+    editorContainer: document.getElementById('editor-container'),
     previewIframe: document.getElementById('preview-iframe'),
     previewEmpty: document.getElementById('preview-empty'),
     workspaceTabs: document.getElementById('workspace-tabs'),
+    runBtn: document.getElementById('run-btn'),
+    terminalOutput: document.getElementById('terminal-output'),
+    terminalClearBtn: document.getElementById('terminal-clear-btn'),
 };
+
+// --- CODEMIRROR LANGUAGE MAP ---
+function getCodemirrorMode(language) {
+    const map = {
+        html: 'htmlmixed', htm: 'htmlmixed',
+        css: 'css',
+        javascript: 'javascript', js: 'javascript',
+        python: 'python',
+        json: { name: 'javascript', json: true },
+        markdown: 'markdown', md: 'markdown',
+        c: 'text/x-csrc', cpp: 'text/x-c++src',
+        java: 'text/x-java',
+        markup: 'htmlmixed',
+        typescript: 'javascript',
+    };
+    return map[language] || 'htmlmixed';
+}
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize CodeMirror
+    state.editor = CodeMirror(dom.editorContainer, {
+        value: '// Generated code will appear here...\n// Edit the code and click ▶ Run to execute.',
+        theme: 'material-darker',
+        lineNumbers: true,
+        matchBrackets: true,
+        indentUnit: 4,
+        tabSize: 4,
+        indentWithTabs: false,
+        lineWrapping: false,
+        readOnly: false,
+        extraKeys: {
+            'Tab': (cm) => cm.replaceSelection('    ', 'end'),
+        },
+    });
+
+    // Sync editor changes back to state
+    state.editor.on('change', () => {
+        if (state.activeCodeFile && state.files[state.activeCodeFile]) {
+            const newCode = state.editor.getValue();
+            state.files[state.activeCodeFile].code = newCode;
+
+            // Update projectFiles for live preview
+            const ext = state.activeCodeFile.split('.').pop().toLowerCase();
+            if (ext === 'html' || ext === 'htm') {
+                state.projectFiles.html = newCode;
+            } else if (ext === 'css') {
+                state.projectFiles.css = newCode;
+            } else if (ext === 'js' || ext === 'mjs') {
+                state.projectFiles.js = newCode;
+            }
+        }
+    });
+
     dom.sendBtn.addEventListener('click', handleSend);
     dom.promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,6 +111,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!btn) return;
         switchTab(btn.dataset.tab);
     });
+
+    // Run button
+    dom.runBtn.addEventListener('click', runCode);
+
+    // Terminal clear
+    dom.terminalClearBtn.addEventListener('click', () => {
+        dom.terminalOutput.textContent = 'Run code to see output here...';
+        dom.terminalOutput.className = 'terminal-output';
+    });
 });
 
 // --- TAB SWITCHING ---
@@ -63,6 +128,11 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
     document.getElementById(`content-${tabName}`).classList.add('active');
+
+    // Refresh CodeMirror when switching to code tab (fixes rendering glitch)
+    if (tabName === 'code' && state.editor) {
+        setTimeout(() => state.editor.refresh(), 10);
+    }
 }
 
 // --- SEND PROMPT ---
@@ -132,6 +202,84 @@ async function handleSend() {
     }
 }
 
+// --- RUN CODE ---
+async function runCode() {
+    if (state.isRunning) return;
+
+    const filename = state.activeCodeFile;
+    if (!filename || !state.files[filename]) {
+        dom.terminalOutput.textContent = '⚠️ No file selected. Generate code first, then select a file to run.';
+        dom.terminalOutput.className = 'terminal-output terminal-error';
+        return;
+    }
+
+    // Get latest code from editor
+    const code = state.editor.getValue();
+    const ext = filename.split('.').pop().toLowerCase();
+
+    const langMap = {
+        py: 'python', js: 'javascript', mjs: 'javascript',
+        cpp: 'cpp', cc: 'cpp', cxx: 'cpp', c: 'c', java: 'java',
+    };
+
+    const language = langMap[ext];
+    if (!language) {
+        dom.terminalOutput.textContent = `⚠️ Cannot run .${ext} files. Supported: .py, .js, .cpp, .c, .java`;
+        dom.terminalOutput.className = 'terminal-output terminal-error';
+        return;
+    }
+
+    state.isRunning = true;
+    dom.runBtn.disabled = true;
+    dom.runBtn.classList.add('running');
+    dom.terminalOutput.textContent = `⏳ Running ${filename}...`;
+    dom.terminalOutput.className = 'terminal-output terminal-running';
+
+    // For compiled languages, collect all related source files
+    const compiledExts = ['cpp', 'cc', 'cxx', 'c', 'h', 'hpp', 'java'];
+    const extraFiles = {};
+    if (compiledExts.includes(ext)) {
+        for (const [fname, fdata] of Object.entries(state.files)) {
+            if (fname === filename) continue;
+            const fext = fname.split('.').pop().toLowerCase();
+            if (compiledExts.includes(fext)) {
+                extraFiles[fname] = fdata.code;
+            }
+        }
+    }
+
+    try {
+        const response = await fetch('/api/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, language, extra_files: extraFiles }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || `Server error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        let output = '';
+        if (result.stdout) output += result.stdout;
+        if (result.stderr) output += (output ? '\n' : '') + result.stderr;
+        if (!output) output = '(no output)';
+
+        dom.terminalOutput.textContent = output;
+        dom.terminalOutput.className = result.exit_code === 0
+            ? 'terminal-output terminal-success'
+            : 'terminal-output terminal-error';
+    } catch (err) {
+        dom.terminalOutput.textContent = `❌ ${err.message}`;
+        dom.terminalOutput.className = 'terminal-output terminal-error';
+    } finally {
+        state.isRunning = false;
+        dom.runBtn.disabled = false;
+        dom.runBtn.classList.remove('running');
+    }
+}
+
 // --- HANDLE AGENT EVENTS ---
 function handleAgentEvent(data) {
     const { agent, status, content, plan, task_plan, current_file } = data;
@@ -195,14 +343,20 @@ function resetAll() {
     dom.planDetails.classList.add('hidden');
     dom.archDetails.classList.add('hidden');
 
-    // Reset code panel
+    // Reset code editor
     dom.codeFileTabs.innerHTML = '';
-    dom.codeBlock.textContent = '// Generated code will appear here...';
+    if (state.editor) {
+        state.editor.setValue('// Generated code will appear here...');
+    }
 
     // Reset preview
     dom.previewIframe.srcdoc = '';
     dom.previewIframe.classList.remove('visible');
     dom.previewEmpty.classList.remove('hidden');
+
+    // Reset terminal
+    dom.terminalOutput.textContent = 'Run code to see output here...';
+    dom.terminalOutput.className = 'terminal-output';
 }
 
 // --- PIPELINE TRACKER ---
@@ -288,8 +442,7 @@ function addActivityCard(agent, title, content, expandable) {
 function formatContent(text) {
     let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-        const langClass = lang ? `language-${lang}` : 'language-markup';
-        return `<pre><code class="${langClass}">${escapeHtml(code.trim())}</code></pre>`;
+        return `<pre><code>${escapeHtml(code.trim())}</code></pre>`;
     });
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/\n/g, '<br>');
@@ -374,7 +527,6 @@ function updateFilesList(files) {
 }
 
 function markFileGenerated(filepath) {
-    // Try exact match first, then try matching by basename
     let item = dom.filesList.querySelector(`[data-path="${filepath}"]`);
     if (!item) {
         const basename = filepath.split('/').pop().split('\\').pop();
@@ -391,7 +543,6 @@ function markFileGenerated(filepath) {
         statusEl.classList.remove('generating');
     }
 
-    // Mark arch step as completed
     const archSteps = dom.archContent.querySelectorAll('.arch-step');
     archSteps.forEach(step => {
         const stepPath = step.dataset.filepath;
@@ -426,34 +577,23 @@ function getFileIcon(ext) {
         md: '📝', txt: '📄', ts: '💠', jsx: '⚛️', tsx: '⚛️',
         vue: '💚', svelte: '🔥', yaml: '⚙️', yml: '⚙️',
         sql: '🗃️', env: '🔒', gitignore: '🙈',
+        cpp: '🔷', c: '🔷', h: '📎', hpp: '📎', java: '☕',
     };
     return icons[ext] || '📄';
 }
 
 // --- CODE EXTRACTION (ROBUST) ---
 function extractAndStoreCode(content, currentFile) {
-    // Mark current file as generating
     if (currentFile) {
         markFileGenerating(currentFile);
     }
 
     let foundAny = false;
 
-    // Strategy 1: Header + code block patterns
-    // Matches patterns like:
-    //   ### `src/index.html`    \n```html\n...\n```
-    //   **index.html**          \n```html\n...\n```
-    //   ## index.html           \n```html\n...\n```
-    //   `index.html`:           \n```html\n...\n```
-    //   **File: index.html**    \n```html\n...\n```
     const headerPatterns = [
-        // ### `filepath`  or  ## `filepath`
         /#{2,4}\s*`([^`\n]+?)`\s*\n\s*```(\w+)?\n([\s\S]*?)```/g,
-        // **filepath** or **File: filepath**
         /\*\*(?:File:\s*)?([^\*\n]+?\.\w+)\*\*\s*\n\s*```(\w+)?\n([\s\S]*?)```/g,
-        // `filepath`:  or  `filepath`
         /`([^`\n]+?\.\w+)`[:\s]*\n\s*```(\w+)?\n([\s\S]*?)```/g,
-        // ## filepath  or  ### filepath  (without backticks, must have file extension)
         /#{2,4}\s+([\w\/\\.-]+\.\w+)\s*\n\s*```(\w+)?\n([\s\S]*?)```/g,
     ];
 
@@ -464,14 +604,13 @@ function extractAndStoreCode(content, currentFile) {
             const language = match[2] || guessLanguage(filename);
             const code = match[3].trim();
 
-            if (code.length > 5) { // Skip empty/trivial blocks
+            if (code.length > 5) {
                 storeFile(filename, code, language);
                 foundAny = true;
             }
         }
     }
 
-    // Strategy 2: If we have a currentFile from the backend and there's a code block, use it
     if (!foundAny && currentFile) {
         const simpleRegex = /```(\w+)?\n([\s\S]*?)```/g;
         let match;
@@ -481,12 +620,11 @@ function extractAndStoreCode(content, currentFile) {
             if (code.length > 5) {
                 storeFile(currentFile, code, lang);
                 foundAny = true;
-                break; // Only use first code block for the current file
+                break;
             }
         }
     }
 
-    // Strategy 3: If still nothing, extract all code blocks and name them by language
     if (!foundAny) {
         const allBlocksRegex = /```(\w+)\n([\s\S]*?)```/g;
         let match;
@@ -495,7 +633,6 @@ function extractAndStoreCode(content, currentFile) {
             const code = match[2].trim();
 
             if (code.length > 5) {
-                // Guess filename from language
                 const filename = guessFilename(lang, Object.keys(state.files).length);
                 storeFile(filename, code, lang);
                 foundAny = true;
@@ -503,12 +640,10 @@ function extractAndStoreCode(content, currentFile) {
         }
     }
 
-    // Mark current file done
     if (currentFile) {
         markFileGenerated(currentFile);
     }
 
-    // Auto-show the first file and switch to code tab
     if (foundAny && !state.activeCodeFile && Object.keys(state.files).length > 0) {
         const firstFile = Object.keys(state.files)[0];
         showCodeFile(firstFile);
@@ -521,9 +656,7 @@ function storeFile(filename, code, language) {
     addCodeFileTab(filename);
     markFileGenerated(filename);
 
-    // Track for live preview
     const ext = filename.split('.').pop().toLowerCase();
-    const basename = filename.split('/').pop().split('\\').pop().toLowerCase();
 
     if (ext === 'html' || ext === 'htm') {
         state.projectFiles.html = code;
@@ -533,7 +666,6 @@ function storeFile(filename, code, language) {
         state.projectFiles.js = code;
     }
 
-    // Update active file if showing code tab
     if (state.activeCodeFile === filename) {
         showCodeFile(filename);
     }
@@ -546,6 +678,8 @@ function guessLanguage(filename) {
         mjs: 'javascript', ts: 'typescript', py: 'python',
         json: 'json', md: 'markdown', yaml: 'yaml', yml: 'yaml',
         sql: 'sql', sh: 'bash', bat: 'batch',
+        cpp: 'cpp', cc: 'cpp', cxx: 'cpp', c: 'c',
+        h: 'cpp', hpp: 'cpp', java: 'java',
     };
     return map[ext] || 'markup';
 }
@@ -555,18 +689,18 @@ function guessFilename(language, idx) {
         html: 'index.html', css: 'styles.css', javascript: 'app.js',
         js: 'app.js', python: 'main.py', json: 'config.json',
         markdown: 'README.md', md: 'README.md',
+        cpp: 'main.cpp', c: 'main.c', java: 'Main.java',
     };
     return map[language] || `file_${idx}.${language}`;
 }
 
-// --- CODE VIEWER ---
+// --- CODE EDITOR ---
 function addCodeFileTab(filename) {
     if (dom.codeFileTabs.querySelector(`[data-file="${filename}"]`)) return;
 
     const tab = document.createElement('button');
     tab.className = 'code-file-tab';
     tab.dataset.file = filename;
-    // Show just the basename for cleaner tabs
     const displayName = filename.split('/').pop().split('\\').pop();
     tab.textContent = displayName;
     tab.title = filename;
@@ -583,20 +717,11 @@ function showCodeFile(filename) {
         t.classList.toggle('active', t.dataset.file === filename);
     });
 
-    const langMap = {
-        html: 'markup', htm: 'markup', css: 'css',
-        javascript: 'javascript', js: 'javascript',
-        python: 'python', json: 'json', markup: 'markup',
-        markdown: 'markup', typescript: 'javascript',
-    };
-    const prismLang = langMap[fileData.language] || 'markup';
-
-    dom.codeBlock.className = `language-${prismLang}`;
-    dom.codeBlock.textContent = fileData.code;
-
-    if (window.Prism) {
-        Prism.highlightElement(dom.codeBlock);
-    }
+    // Set CodeMirror mode and content
+    const mode = getCodemirrorMode(fileData.language);
+    state.editor.setOption('mode', mode);
+    state.editor.setValue(fileData.code);
+    state.editor.refresh();
 }
 
 // --- LIVE PREVIEW ---
@@ -607,26 +732,15 @@ function updateLivePreview() {
 
     let finalHtml;
 
-    // Check if the HTML is a full document (contains <html> or <!DOCTYPE>)
     const isFullDocument = /<!DOCTYPE|<html/i.test(html);
 
     if (isFullDocument) {
-        // The LLM generated a full HTML document
-        // We need to:
-        // 1. Remove external <link> stylesheet references (they'll 404 in srcdoc)
-        // 2. Remove external <script src="..."> references (they'll 404 in srcdoc)
-        // 3. Inject our collected CSS and JS inline instead
-
         finalHtml = html;
 
-        // Remove external CSS links (e.g., <link rel="stylesheet" href="style.css">)
         finalHtml = finalHtml.replace(/<link[^>]*rel=["']stylesheet["'][^>]*href=["'](?!https?:\/\/)[^"']*["'][^>]*\/?>/gi, '');
         finalHtml = finalHtml.replace(/<link[^>]*href=["'](?!https?:\/\/)[^"']*["'][^>]*rel=["']stylesheet["'][^>]*\/?>/gi, '');
-
-        // Remove external script tags (e.g., <script src="script.js"></script>)
         finalHtml = finalHtml.replace(/<script[^>]*src=["'](?!https?:\/\/)[^"']*["'][^>]*><\/script>/gi, '');
 
-        // Inject CSS into <head> (before </head>)
         if (css) {
             const styleTag = `<style>${css}</style>`;
             if (finalHtml.includes('</head>')) {
@@ -636,7 +750,6 @@ function updateLivePreview() {
             }
         }
 
-        // Inject JS before </body>
         if (js) {
             const scriptTag = `<script>${js}<\/script>`;
             if (finalHtml.includes('</body>')) {
@@ -646,7 +759,6 @@ function updateLivePreview() {
             }
         }
     } else {
-        // HTML is just a fragment — wrap it in a full document
         finalHtml = `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><style>${css}</style></head>
@@ -658,7 +770,6 @@ function updateLivePreview() {
     dom.previewIframe.classList.add('visible');
     dom.previewEmpty.classList.add('hidden');
 }
-
 
 // --- STATUS INDICATOR ---
 function setStatus(type, text) {
