@@ -1,0 +1,9 @@
+.playgroud-container{
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-container{
+    display: flex;
+    min-height: 60vh;
+}
