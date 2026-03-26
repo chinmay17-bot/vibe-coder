@@ -1,142 +1,145 @@
 // ==========================================
 // 1. IMPORTS & DEPENDENCIES
 // ==========================================
-const http = require('http');           // Core Node.js module to create the raw HTTP server
-const express = require('express');     // Web framework to handle routing and middleware
-const { Server: SocketServer } = require('socket.io'); // Real-time bidirectional event-based communication
-const pty = require('node-pty');        // Allows us to spawn a pseudo-terminal (like a real command line)
-const os = require('os');      // Core Node.js module to check the operating system
-const fs= require('fs/promises')         
-const path= require('path')
-const cors= require('cors')
-const chokidar= require('chokidar')
+const http = require('http');
+const express = require('express');
+const { Server: SocketServer } = require('socket.io');
+const cors = require('cors');
+const containerManager = require('./containerManager');
 
 // ==========================================
-// 2. TERMINAL SETUP
-// ==========================================
-// Determine which shell to use based on the operating system.
-// Windows uses PowerShell, while macOS and Linux use bash.
-const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-
-// Spawn the actual terminal process.
-const ptyProcess = pty.spawn(shell, [], { // <-- Pass an empty array here instead of shellArgs
-    name: 'xterm-color', 
-    cols: 80,            
-    rows: 30,            
-    cwd: process.cwd() + '/user', 
-    env: process.env  
-});
-// ==========================================
-// 3. SERVER INITIALIZATION
+// 2. SERVER INITIALIZATION
 // ==========================================
 const app = express();
-const server = http.createServer(app); // Wrap Express app in a raw HTTP server for Socket.io
+const server = http.createServer(app);
 
-// Initialize Socket.io and attach it to the HTTP server.
-// CORS is set to "*" (allow all) so your frontend can connect from a different port (like localhost:3000)
 const io = new SocketServer(server, {
     cors: { origin: "*" }
-}); 
-
-app.use(cors())
-
-//used to refresh the file front end this will be called in front
-chokidar.watch('./user').on('all', (event, path) =>{
-    io.emit('file:refresh',path)
-})
-
-app.get('/files' , async (req, res) => {
-    const fileTree= await generateFileTree('./user')
-    return res.json({tree : fileTree})
-})
-
-app.get('/files/content' , async (req, res) => {
-    const path= req.query.path
-    const content= await fs.readFile(`./user${path}` , 'utf-8')
-    return res.json({content})
-})
-
-// ==========================================
-// 4. BI-DIRECTIONAL COMMUNICATION LOGIC
-// ==========================================
-
-// FLOW 1: Terminal -> Client(s)
-// Whenever the pseudo-terminal outputs something (like the result of an 'ls' command),
-// we catch that raw data and broadcast it to ALL connected Socket.io clients.
-ptyProcess.onData(data => {
-    io.emit('terminal:data', data);
 });
 
-// Listen for new frontend clients connecting to our Socket.io server
-io.on('connection' , (socket) => {
-    console.log(`Socket connected` , socket.id);
-
-
-    // socket.emit('file:refresh')
-    socket.on('file:change' , async ({path, content}) => {
-        console.log('got here')
-        await fs.writeFile(`./user${path}`,content)
-    })
-    
-    // FLOW 2: Client -> Terminal
-    // Listen for custom 'terminal:write' events sent from the frontend.
-    socket.on('terminal:write',(data) => {
-        
-        ptyProcess.write(data);
-    });
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+app.use(cors());
 
 // ==========================================
-// 5. START UP
+// 3. HTTP API ROUTES
 // ==========================================
-// GOAL: Eventually host multiple docker instances in AWS.
-server.listen(9000, () =>{
-    console.log("Server is running on port 9000");
-});
 
+// File tree endpoint — requires sessionId query param
 app.get('/files', async (req, res) => {
-    const fileTree = await generateFileTree('./user')
-    return res.json({tree : fileTree})
-})
-
-
-//HELPER FUNCTION
-async function generateFileTree(directory){
-    const tree = {}
-
-    async function buildTree(currentDir, currentTree){
-        const files= await fs.readdir(currentDir)
-
-        for(const file of files){
-            const filePath = path.join(currentDir, file)
-            const stat= await fs.stat(filePath)
-
-            if(stat.isDirectory()){
-                currentTree[file] = {}
-                await buildTree(filePath , currentTree[file])
-            }else{
-                currentTree[file] = null
-            }
-        }
-
+    const sessionId = req.query.sessionId;
+    if (!sessionId) {
+        return res.status(400).json({ error: 'Missing sessionId query parameter' });
     }
-    await buildTree(directory, tree)
-    return tree
+
+    try {
+        const tree = await containerManager.getFileTree(sessionId);
+        return res.json({ tree });
+    } catch (err) {
+        console.error(`[Server] Error getting file tree for ${sessionId}:`, err.message);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// File content endpoint — requires sessionId and path query params
+app.get('/files/content', async (req, res) => {
+    const sessionId = req.query.sessionId;
+    const filePath = req.query.path;
+    if (!sessionId || !filePath) {
+        return res.status(400).json({ error: 'Missing sessionId or path query parameter' });
+    }
+
+    try {
+        const content = await containerManager.getFileContent(sessionId, filePath);
+        return res.json({ content });
+    } catch (err) {
+        console.error(`[Server] Error reading file for ${sessionId}:`, err.message);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// 4. SOCKET.IO — PER-SESSION CONTAINER LOGIC
+// ==========================================
+io.on('connection', async (socket) => {
+    const sessionId = socket.id;
+    console.log(`[Server] Socket connected: ${sessionId}`);
+
+    // --- Provision a Docker container for this session ---
+    try {
+        socket.emit('session:status', { status: 'provisioning', message: 'Creating your workspace...' });
+
+        const { containerId, containerName } = await containerManager.createSession(sessionId);
+        console.log(`[Server] Container ready for ${sessionId}: ${containerName}`);
+
+        // Notify client that the container is ready
+        socket.emit('session:status', { status: 'ready', message: 'Workspace is ready!' });
+
+        // --- Attach terminal ---
+        const termStream = await containerManager.attachTerminal(sessionId);
+
+        // FLOW 1: Container terminal → Client
+        termStream.on('data', (data) => {
+            socket.emit('terminal:data', data.toString());
+        });
+
+        // FLOW 2: Client → Container terminal
+        socket.on('terminal:write', (data) => {
+            termStream.write(data);
+        });
+
+        // --- File change from editor ---
+        socket.on('file:change', async ({ path, content }) => {
+            try {
+                await containerManager.writeFile(sessionId, path, content);
+                console.log(`[Server] File written: ${path} (session: ${sessionId})`);
+            } catch (err) {
+                console.error(`[Server] Error writing file:`, err.message);
+                socket.emit('session:error', { message: `Failed to save file: ${err.message}` });
+            }
+        });
+
+        // --- File tree refresh polling ---
+        // Since chokidar can't watch inside a container, we poll periodically
+        const FILE_POLL_INTERVAL_MS = 3000;
+        const pollTimer = setInterval(async () => {
+            try {
+                // Only emit if session is still active
+                if (containerManager.sessions.has(sessionId)) {
+                    socket.emit('file:refresh');
+                }
+            } catch (_) {
+                // Ignore errors during polling
+            }
+        }, FILE_POLL_INTERVAL_MS);
+
+        // --- Cleanup on disconnect ---
+        socket.on('disconnect', async () => {
+            console.log(`[Server] Socket disconnected: ${sessionId}`);
+            clearInterval(pollTimer);
+            await containerManager.destroySession(sessionId);
+        });
+
+    } catch (err) {
+        console.error(`[Server] Failed to create session for ${sessionId}:`, err.message);
+        socket.emit('session:status', { status: 'error', message: `Failed to create workspace: ${err.message}` });
+    }
+});
+
+// ==========================================
+// 5. GRACEFUL SHUTDOWN
+// ==========================================
+async function shutdown() {
+    console.log('\n[Server] Shutting down... destroying all containers.');
+    await containerManager.destroyAll();
+    process.exit(0);
 }
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+// ==========================================
+// 6. START UP
+// ==========================================
+server.listen(9000, () => {
+    console.log('[Server] Orchestrator running on http://localhost:9000');
+    console.log('[Server] Each socket connection will get its own Docker container.');
+});

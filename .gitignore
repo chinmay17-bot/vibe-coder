@@ -52,3 +52,30 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# =========================
+# ADDED: Docker Specific
+# =========================
+# Ignore local data volumes mounted by Docker
+docker-data/
+db-data/
+postgres-data/
+mongo-data/
+
+# Ignore local override files for docker-compose
+docker-compose.override.yml
+
+# =========================
+# ADDED: Vite & React Specific
+# =========================
+dist-ssr/
+.eslintcache
+
+# =========================
+# ADDED: Node.js Runtime & Testing
+# =========================
+pids/
+*.pid
+*.seed
+*.pid.lock
+coverage/

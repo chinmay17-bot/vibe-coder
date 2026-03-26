@@ -1,0 +1,19 @@
+# Lightweight workspace container for per-user code editing sessions.
+# Each user gets their own instance with an isolated filesystem and shell.
+
+FROM node:20-alpine
+
+# Install common dev tools for code execution
+RUN apk add --no-cache \
+    bash \
+    python3 \
+    gcc \
+    g++ \
+    make \
+    musl-dev
+
+# Set the working directory for user files
+WORKDIR /workspace
+
+# Keep the container alive so we can exec interactive shells into it
+CMD ["tail", "-f", "/dev/null"]
