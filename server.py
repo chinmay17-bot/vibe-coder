@@ -37,6 +37,10 @@ async def event_stream(prompt: str):
     error_holder = [None]
 
     def run_graph():
+        # Track files already sent via SSE to avoid re-sending the full
+        # accumulated dict on every coder event
+        sent_files = set()
+
         try:
             for output in compiled_graph.stream(inputs, config):
                 for node_name, state_update in output.items():
@@ -80,7 +84,7 @@ async def event_stream(prompt: str):
                     if "status" in state_update and state_update["status"] == "DONE":
                         event_data["status"] = "done"
 
-                    # Extract current file being coded
+                    # Extract current file being coded and generated files dict
                     if "coder_state" in state_update:
                         coder_state = state_update["coder_state"]
                         if hasattr(coder_state, "task_plan"):
@@ -88,6 +92,15 @@ async def event_stream(prompt: str):
                             steps = coder_state.task_plan.implementation_steps
                             if current_idx > 0 and current_idx <= len(steps):
                                 event_data["current_file"] = steps[current_idx - 1].filepath
+                        
+                        # Only send NEW files that haven't been sent in a previous event
+                        # The generated_files dict accumulates across coder steps,
+                        # so we filter to avoid duplicate writes on the Node server
+                        if hasattr(coder_state, "generated_files") and coder_state.generated_files:
+                            new_files = {k: v for k, v in coder_state.generated_files.items() if k not in sent_files}
+                            if new_files:
+                                event_data["generated_files"] = new_files
+                                sent_files.update(new_files.keys())
 
                     event_queue.put(event_data)
         except Exception as e:

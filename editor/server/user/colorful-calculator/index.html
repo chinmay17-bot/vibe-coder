@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colorful Calculator</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <div id="calculator" class="calculator">
+        <!-- Display Area -->
+        <div class="display">
+            <div class="display__previous" id="previous-output" role="textbox" aria-live="polite"></div>
+            <div class="display__current" id="current-output" role="textbox" aria-live="polite"></div>
+        </div>
+
+        <!-- Button Grid -->
+        <div class="button-grid">
+            <!-- Row 1 -->
+            <button type="button"
+                    class="button button--function"
+                    id="key-C"
+                    data-key="C"
+                    aria-label="Clear">
+                C
+            </button>
+            <button type="button"
+                    class="button button--function"
+                    id="key-backspace"
+                    data-key="←"
+                    aria-label="Backspace">
+                ←
+            </button>
+            <button type="button"
+                    class="button button--function"
+                    id="key-plusminus"
+                    data-key="±"
+                    aria-label="Toggle Sign">
+                ±
+            </button>
+            <button type="button"
+                    class="button button--operator"
+                    id="key-divide"
+                    data-key="÷"
+                    aria-label="Divide">
+                ÷
+            </button>
+
+            <!-- Row 2 -->
+            <button type="button"
+                    class="button button--digit"
+                    id="key-7"
+                    data-key="7"
+                    aria-label="Seven">
+                7
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-8"
+                    data-key="8"
+                    aria-label="Eight">
+                8
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-9"
+                    data-key="9"
+                    aria-label="Nine">
+                9
+            </button>
+            <button type="button"
+                    class="button button--operator"
+                    id="key-multiply"
+                    data-key="×"
+                    aria-label="Multiply">
+                ×
+            </button>
+
+            <!-- Row 3 -->
+            <button type="button"
+                    class="button button--digit"
+                    id="key-4"
+                    data-key="4"
+                    aria-label="Four">
+                4
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-5"
+                    data-key="5"
+                    aria-label="Five">
+                5
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-6"
+                    data-key="6"
+                    aria-label="Six">
+                6
+            </button>
+            <button type="button"
+                    class="button button--operator"
+                    id="key-minus"
+                    data-key="−"
+                    aria-label="Subtract">
+                −
+            </button>
+
+            <!-- Row 4 -->
+            <button type="button"
+                    class="button button--digit"
+                    id="key-1"
+                    data-key="1"
+                    aria-label="One">
+                1
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-2"
+                    data-key="2"
+                    aria-label="Two">
+                2
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-3"
+                    data-key="3"
+                    aria-label="Three">
+                3
+            </button>
+            <button type="button"
+                    class="button button--operator"
+                    id="key-plus"
+                    data-key="+"
+                    aria-label="Add">
+                +
+            </button>
+
+            <!-- Row 5 -->
+            <button type="button"
+                    class="button button--digit"
+                    id="key-0"
+                    data-key="0"
+                    data-grid-span="2"
+                    aria-label="Zero">
+                0
+            </button>
+            <button type="button"
+                    class="button button--digit"
+                    id="key-decimal"
+                    data-key="."
+                    aria-label="Decimal Point">
+                .
+            </button>
+            <button type="button"
+                    class="button button--function"
+                    id="key-equals"
+                    data-key="="
+                    aria-label="Equals">
+                =
+            </button>
+        </div>
+    </div>
+
+    <!-- Keyboard support hint (hidden) -->
+    <p id="keyboard-hint" style="display:none;">
+        Supported keys: 0-9, ., +, -, *, /, Enter (=), Backspace (←), Delete (C), +/- (±)
+    </p>
+</body>
+</html>
