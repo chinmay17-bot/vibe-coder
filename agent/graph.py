@@ -21,7 +21,9 @@ def planner_agent(state: dict) -> dict:
     """Converts user prompt into a structured Plan."""
     user_prompt = state["user_prompt"]
 
-    resp = llm.with_structured_output(Plan).invoke(planner_prompt(user_prompt))
+    resp = llm.with_structured_output(Plan, method="json_mode").invoke(
+        planner_prompt(user_prompt)
+    )
     
     if resp is None:
         raise ValueError("Planner did not return a valid response.")
@@ -41,7 +43,7 @@ def architect_agent(state: dict) -> dict:
     """Creates TaskPlan from Plan."""
     plan: Plan = state["plan"]
 
-    resp = llm.with_structured_output(TaskPlan).invoke(
+    resp = llm.with_structured_output(TaskPlan, method="json_mode").invoke(
         architect_prompt(plan=plan.model_dump_json())
     )
     

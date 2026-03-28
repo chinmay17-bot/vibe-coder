@@ -1,38 +1,46 @@
 def planner_prompt(user_prompt: str) -> str:
     PLANNER_PROMPT = f"""
 You are the PLANNER agent. Convert the user prompt into a COMPLETE engineering project plan.
+Respond with a valid JSON object with EXACTLY this structure:
+{{
+  "name": "AppName",
+  "description": "One line description",
+  "techstack": "HTML, CSS, JavaScript (vanilla, no frameworks)",
+  "features": ["feature 1", "feature 2"],
+  "files": [
+    {{"path": "index.html", "purpose": "Main HTML file"}},
+    {{"path": "styles.css", "purpose": "Stylesheet"}},
+    {{"path": "app.js", "purpose": "JavaScript logic"}}
+  ]
+}}
 
-IMPORTANT RULES:
-- The generated project MUST be a vanilla HTML/CSS/JavaScript project that runs directly in a browser.
-- DO NOT use any frameworks (React, Vue, Angular, etc.) or build tools (Webpack, Vite, etc.).
-- DO NOT use ES modules (import/export). All JS must use plain <script> tags.
-- The project MUST have at minimum: index.html, styles.css, and app.js.
-- Keep the file structure flat — no subdirectories unless absolutely necessary.
-- The index.html must link to styles.css and app.js correctly.
-- Focus on creating a FULLY FUNCTIONAL, INTERACTIVE application — not just a visual mockup.
-- Make the design colorful, modern, and visually appealing with CSS.
+RULES:
+- Project MUST be vanilla HTML/CSS/JavaScript only — no frameworks, no build tools.
+- Always include at minimum: index.html, styles.css, app.js.
+- Flat file structure — no subdirectories.
+- Focus on a FULLY FUNCTIONAL, INTERACTIVE application.
 
-User request:
-{user_prompt}
+User request: {user_prompt}
     """
     return PLANNER_PROMPT
 
 
 def architect_prompt(plan: str) -> str:
     ARCHITECT_PROMPT = f"""
-You are the ARCHITECT agent. Given this project plan, break it down into explicit engineering tasks.
+You are the ARCHITECT agent. Given this project plan, break it down into implementation tasks.
+Respond with a valid JSON object with EXACTLY this structure:
+{{
+  "implementation_steps": [
+    {{"filepath": "index.html", "task_description": "detailed description of what to implement"}},
+    {{"filepath": "styles.css", "task_description": "detailed description of what to implement"}},
+    {{"filepath": "app.js", "task_description": "detailed description of what to implement"}}
+  ]
+}}
 
 RULES:
-- For each FILE in the plan, create ONE implementation task (do not split a single file into multiple tasks).
-- Order tasks so that HTML is generated FIRST, then CSS, then JavaScript.
-- In each task description:
-    * Specify exactly what to implement in full detail.
-    * For HTML: describe the complete DOM structure, all elements, classes, IDs, and data attributes.
-    * For CSS: describe all styles, colors, layouts, animations, responsive design.
-    * For JS: describe all functions, event listeners, logic, DOM queries, and state management.
-    * Include the FULL integration details: which IDs/classes the JS will query, which CSS classes style which elements.
-- File paths MUST be simple filenames (e.g., "index.html", "styles.css", "app.js") — NO directory prefixes.
-- Each task must be completely self-contained with enough detail that a developer could implement it without seeing the other files.
+- One task per file. Order: HTML first, then CSS, then JavaScript.
+- File paths must be simple filenames only — no directory prefixes.
+- Each task_description must be detailed enough to implement the file standalone.
 
 Project Plan:
 {plan}
