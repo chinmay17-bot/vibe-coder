@@ -1,7 +1,6 @@
 const http = require('http');
 const express = require('express');
 const { Server: SocketServer } = require('socket.io');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 const Docker = require('dockerode');
 const cors = require('cors');
 
@@ -121,16 +120,29 @@ async function destroySession(sessionId) {
 
 // ── HTTP proxy: forward REST calls to the right container ──
 // Client sends header X-Session-Id on every request
-app.use('/files', (req, res, next) => {
-    const sessionId = req.headers['x-session-id'];
-    const session = sessions.get(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+const PROXY_PATHS = ['/files'];
+PROXY_PATHS.forEach(route => {
+    app.use(route, async (req, res) => {
+        const sessionId = req.headers['x-session-id'];
+        const session = sessions.get(sessionId);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    createProxyMiddleware({
-        target: `http://${session.host}:9000`,
-        changeOrigin: true,
-        on: { error: (err) => res.status(502).json({ error: err.message }) },
-    })(req, res, next);
+        const url = `http://${session.host}:9000${req.originalUrl}`;
+        try {
+            const fetchOpts = {
+                method: req.method,
+                headers: { 'Content-Type': 'application/json' },
+            };
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+                fetchOpts.body = JSON.stringify(req.body);
+            }
+            const upstream = await fetch(url, fetchOpts);
+            const data = await upstream.json();
+            res.status(upstream.status).json(data);
+        } catch (err) {
+            res.status(502).json({ error: err.message });
+        }
+    });
 });
 
 // ── Socket.IO: one namespace per session ──
