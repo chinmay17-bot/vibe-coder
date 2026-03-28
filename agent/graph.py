@@ -20,17 +20,8 @@ llm = ChatGroq(model="openai/gpt-oss-120b")
 def planner_agent(state: dict) -> dict:
     """Converts user prompt into a structured Plan."""
     user_prompt = state["user_prompt"]
-    
-    # Use json_mode to avoid tool-calling issues with some models (Fix #3)
-    try:
-        resp = llm.with_structured_output(Plan, method="json_mode").invoke(
-            planner_prompt(user_prompt)
-        )
-    except Exception:
-        # Fallback: try default method
-        resp = llm.with_structured_output(Plan).invoke(
-            planner_prompt(user_prompt)
-        )
+
+    resp = llm.with_structured_output(Plan).invoke(planner_prompt(user_prompt))
     
     if resp is None:
         raise ValueError("Planner did not return a valid response.")
@@ -49,16 +40,10 @@ def planner_agent(state: dict) -> dict:
 def architect_agent(state: dict) -> dict:
     """Creates TaskPlan from Plan."""
     plan: Plan = state["plan"]
-    
-    # Use json_mode to avoid tool-calling issues (Fix #3)
-    try:
-        resp = llm.with_structured_output(TaskPlan, method="json_mode").invoke(
-            architect_prompt(plan=plan.model_dump_json())
-        )
-    except Exception:
-        resp = llm.with_structured_output(TaskPlan).invoke(
-            architect_prompt(plan=plan.model_dump_json())
-        )
+
+    resp = llm.with_structured_output(TaskPlan).invoke(
+        architect_prompt(plan=plan.model_dump_json())
+    )
     
     if resp is None:
         raise ValueError("Architect did not return a valid response.")

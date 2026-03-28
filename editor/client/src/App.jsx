@@ -3,7 +3,7 @@ import Chatbot from "./components/Chatbot"
 import './App.css'
 import { useEffect, useState, useCallback, useRef } from "react"
 import FileTree, { ContextMenu, InlineInput } from "./components/tree"
-import socket from "./socket"
+import socket, { sessionId } from "./socket"
 import ReactAce from "react-ace";
 
 import "ace-builds/src-noconflict/mode-javascript";
@@ -68,7 +68,16 @@ function getFileName(filePath) {
   return filePath.split('/').pop();
 }
 
+// Helper: all REST calls go to orchestrator with session header
+const API = 'http://localhost:3000';
+const apiFetch = (path, opts = {}) =>
+  fetch(`${API}${path}`, {
+    ...opts,
+    headers: { 'x-session-id': sessionId, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+
 function App() {
+  const [sessionReady, setSessionReady] = useState(false)
   const [fileTree, setFileTree] = useState({})
   const [selectedFile, setSelectedFile] = useState('')
   const [selectedFileContent, setSelectedFileContent] = useState('')
@@ -83,9 +92,21 @@ function App() {
   // Ref to always hold the latest delete handler (avoids stale closure in event listener)
   const deleteRef = useRef(null)
 
+  // Wait for orchestrator to confirm container is ready, then load file tree
+  useEffect(() => {
+    socket.on('session:status', ({ status }) => {
+      if (status === 'ready') {
+        setSessionReady(true);
+        // Load file tree once session is confirmed ready
+        setTimeout(getFileTree, 500);
+      }
+    });
+    return () => socket.off('session:status');
+  }, [])
+
   const getFileTree = async () => {
     try {
-      const response = await fetch('http://localhost:9000/files')
+      const response = await apiFetch('/files')
       const result = await response.json()
       setFileTree(result.tree)
     } catch (err) {
@@ -96,9 +117,8 @@ function App() {
   // ── File management handlers (defined early so refs can capture them) ──
   const handleDeleteItem = async (filePath) => {
     try {
-      const res = await fetch('http://localhost:9000/files/delete', {
+      const res = await apiFetch('/files/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filePath })
       })
       const data = await res.json()
@@ -126,7 +146,7 @@ function App() {
   const getFileContents = useCallback(async () => {
     if (!selectedFile) return
     try {
-      const response = await fetch(`http://localhost:9000/files/content?path=${selectedFile}`)
+      const response = await apiFetch(`/files/content?path=${selectedFile}`)
       const result = await response.json()
       setSelectedFileContent(result.content)
     } catch (err) {
@@ -148,14 +168,12 @@ function App() {
     }
   }, [selectedFile, getFileContents])
 
-  // Initial file tree load
-  useEffect(() => { getFileTree() }, [])
-
   // Auto-refresh file tree on changes
   useEffect(() => {
+    if (!sessionReady) return
     socket.on('file:refresh', getFileTree)
     return () => { socket.off('file:refresh', getFileTree) }
-  }, [])
+  }, [sessionReady])
 
   // Listen for context menu events from file tree nodes
   useEffect(() => {
@@ -221,9 +239,8 @@ function App() {
     if (!inlineInput || !name) { setInlineInput(null); return }
     const filePath = inlineInput.parentPath + '/' + name
     try {
-      await fetch('http://localhost:9000/files/create', {
+      await apiFetch('/files/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filePath, isDirectory: inlineInput.type === 'folder' })
       })
       getFileTree()
@@ -231,6 +248,15 @@ function App() {
       console.error('Failed to create:', err)
     }
     setInlineInput(null)
+  }
+
+  if (!sessionReady) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px', background: '#0d1117', color: '#e6edf3' }}>
+        <div style={{ fontSize: '2rem' }}>⚡</div>
+        <p style={{ margin: 0 }}>Starting your workspace...</p>
+      </div>
+    )
   }
 
   return (

@@ -17,7 +17,7 @@ const chokidar = require('chokidar');
 // ==========================================
 const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
 
-const userDir = path.resolve(__dirname, 'user');
+const userDir = process.env.USER_DIR || path.resolve(__dirname, 'user');
 if (!fsSync.existsSync(userDir)) {
     fsSync.mkdirSync(userDir, { recursive: true });
 }
@@ -46,7 +46,13 @@ app.use(express.json());
 // ==========================================
 // 4. FILE WATCHING
 // ==========================================
-chokidar.watch(userDir, { ignoreInitial: true }).on('all', (event, filePath) => {
+chokidar.watch(userDir, {
+    ignoreInitial: true,
+    depth: 10,
+    usePolling: true,
+    interval: 500,
+    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+}).on('all', (event, filePath) => {
     io.emit('file:refresh', filePath);
 });
 
@@ -294,7 +300,8 @@ io.on('connection', (socket) => {
         const writtenFiles = new Set();
 
         try {
-            const response = await fetch('http://localhost:8000/api/generate', {
+            const FASTAPI_URL = process.env.FASTAPI_URL || 'http://localhost:8000';
+            const response = await fetch(`${FASTAPI_URL}/api/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
