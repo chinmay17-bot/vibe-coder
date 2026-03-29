@@ -1,9 +1,10 @@
 import Terminal from "./components/terminal"
 import Chatbot from "./components/Chatbot"
+import SessionPicker from "./components/SessionPicker"
 import './App.css'
 import { useEffect, useState, useCallback, useRef } from "react"
 import FileTree, { ContextMenu, InlineInput } from "./components/tree"
-import socket, { sessionId } from "./socket"
+import socket from "./socket"
 import ReactAce from "react-ace";
 
 import "ace-builds/src-noconflict/mode-javascript";
@@ -70,14 +71,17 @@ function getFileName(filePath) {
 
 // Helper: all REST calls go to orchestrator with session header
 const API = 'http://localhost:3000';
-const apiFetch = (path, opts = {}) =>
-  fetch(`${API}${path}`, {
+const apiFetch = (path, opts = {}) => {
+  const sid = sessionStorage.getItem('sessionId');
+  return fetch(`${API}${path}`, {
     ...opts,
-    headers: { 'x-session-id': sessionId, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    headers: { 'x-session-id': sid, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
+};
 
 function App() {
   const [sessionReady, setSessionReady] = useState(false)
+  const [sessionId, setSessionId] = useState(sessionStorage.getItem('sessionId'))
   const [fileTree, setFileTree] = useState({})
   const [selectedFile, setSelectedFile] = useState('')
   const [selectedFileContent, setSelectedFileContent] = useState('')
@@ -252,10 +256,11 @@ function App() {
 
   if (!sessionReady) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px', background: '#0d1117', color: '#e6edf3' }}>
-        <div style={{ fontSize: '2rem' }}>⚡</div>
-        <p style={{ margin: 0 }}>Starting your workspace...</p>
-      </div>
+      <SessionPicker onSessionReady={(sid) => {
+        setSessionId(sid);
+        setSessionReady(true);
+        setTimeout(getFileTree, 500);
+      }} />
     )
   }
 

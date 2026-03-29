@@ -118,6 +118,44 @@ async function destroySession(sessionId) {
     }
 }
 
+// ── Session management endpoints ──
+
+// List all active sessions
+app.get('/sessions', async (req, res) => {
+    try {
+        const containers = await docker.listContainers();
+        const sessionContainers = containers.filter(c =>
+            c.Names.some(n => n.includes('coder-session'))
+        );
+        const list = sessionContainers.map(c => {
+            const name = c.Names[0].replace('/', '');
+            const sessionId = name.replace('coder-session-', '');
+            return {
+                sessionId,
+                name,
+                status: c.Status,
+                created: c.Created,
+                active: sessions.has(sessionId),
+            };
+        });
+        res.json({ sessions: list });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete/stop a session
+app.delete('/sessions/:sessionId', async (req, res) => {
+    const { sessionId } = req.params;
+    await destroySession(sessionId);
+    // Also force-remove the container if it's still there
+    try {
+        const container = docker.getContainer(`coder-session-${sessionId}`);
+        await container.remove({ force: true });
+    } catch (_) {}
+    res.json({ success: true });
+});
+
 // ── HTTP proxy: forward REST calls to the right container ──
 // Client sends header X-Session-Id on every request
 const PROXY_PATHS = ['/files'];
@@ -147,44 +185,65 @@ PROXY_PATHS.forEach(route => {
 
 // ── Socket.IO: one namespace per session ──
 io.on('connection', async (socket) => {
-    const sessionId = socket.handshake.query.sessionId || socket.id;
-    console.log(`[Orchestrator] New connection: socket=${socket.id}, session=${sessionId}`);
+    console.log(`[Orchestrator] New connection: socket=${socket.id}`);
+
+    // Client must send session:select or session:new to start
+    socket.on('session:select', async (sessionId) => {
+        await attachSession(socket, sessionId, false);
+    });
+
+    socket.on('session:new', async () => {
+        const sessionId = require('crypto').randomUUID();
+        await attachSession(socket, sessionId, true);
+    });
+});
+
+async function attachSession(socket, sessionId, forceNew) {
+    console.log(`[Orchestrator] Attaching session=${sessionId}, forceNew=${forceNew}`);
 
     let session = sessions.get(sessionId);
 
-    if (!session) {
-        // If already spawning for this session, wait for it
+    if (!session || forceNew) {
         if (spawning.has(sessionId)) {
             try {
-                socket.emit('session:status', { status: 'starting' });
+                socket.emit('session:status', { status: 'starting', sessionId });
                 session = await spawning.get(sessionId);
-                socket.emit('session:status', { status: 'ready', port: session.port });
+                socket.emit('session:status', { status: 'ready', sessionId });
             } catch (err) {
                 socket.emit('session:status', { status: 'error', message: err.message });
-                socket.disconnect();
                 return;
             }
         } else {
             try {
-                socket.emit('session:status', { status: 'starting' });
+                socket.emit('session:status', { status: 'starting', sessionId });
                 const spawnPromise = spawnContainer(sessionId);
                 spawning.set(sessionId, spawnPromise);
                 session = await spawnPromise;
                 spawning.delete(sessionId);
                 sessions.set(sessionId, session);
-                socket.emit('session:status', { status: 'ready', port: session.port });
+                socket.emit('session:status', { status: 'ready', sessionId });
                 console.log(`[Orchestrator] Session ${sessionId} ready on port ${session.port}`);
             } catch (err) {
                 spawning.delete(sessionId);
                 console.error(`[Orchestrator] Failed to spawn container:`, err.message);
                 socket.emit('session:status', { status: 'error', message: err.message });
-                socket.disconnect();
                 return;
             }
         }
     } else {
-        socket.emit('session:status', { status: 'ready', port: session.port });
+        // Reconnect to existing container
+        try {
+            await waitForPort(9000, session.host, 5, 300);
+            socket.emit('session:status', { status: 'ready', sessionId });
+        } catch {
+            // Container died, respawn
+            sessions.delete(sessionId);
+            return attachSession(socket, sessionId, true);
+        }
     }
+
+    // Store sessionId on socket for cleanup
+    socket.data.sessionId = sessionId;
 
     // Forward all events to the session container via a proxy socket
     const { io: ioClient } = require('socket.io-client');
@@ -204,17 +263,16 @@ io.on('connection', async (socket) => {
     socket.on('disconnect', async () => {
         console.log(`[Orchestrator] Socket ${socket.id} disconnected`);
         upstream.disconnect();
-        // Delay destruction to handle React StrictMode double-mount and brief reconnects
         setTimeout(async () => {
             const remaining = [...io.sockets.sockets.values()].filter(
-                s => s.handshake.query.sessionId === sessionId
+                s => s.data.sessionId === sessionId
             );
             if (remaining.length === 0) {
                 await destroySession(sessionId);
             }
         }, 5000);
     });
-});
+}
 
 server.listen(3000, () => {
     console.log('[Orchestrator] Running on port 3000');
