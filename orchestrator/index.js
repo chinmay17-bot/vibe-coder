@@ -285,9 +285,16 @@ async function attachSession(socket, sessionId, forceNew) {
         broadcastToSession('file:synced', data);
     });
 
+    // Relay cursor position to all peers in the same session
+    socket.on('cursor:move', (data) => {
+        broadcastToSession('cursor:update', { ...data, socketId: socket.id });
+    });
+
     socket.on('disconnect', async () => {
         console.log(`[Orchestrator] Socket ${socket.id} disconnected`);
         upstream.disconnect();
+        // Notify peers this cursor is gone
+        broadcastToSession('cursor:leave', { socketId: socket.id });
         // Remove from session group
         const peers = sessionSockets.get(sessionId);
         if (peers) {

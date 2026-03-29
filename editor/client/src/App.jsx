@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import FileTree, { ContextMenu, InlineInput } from "./components/tree"
 import socket from "./socket"
 import ReactAce from "react-ace";
+import { useCollabCursors } from "./hooks/useCollabCursors"
 
 import "ace-builds/src-noconflict/mode-javascript";
 import "ace-builds/src-noconflict/mode-python";
@@ -95,6 +96,9 @@ function App() {
 
   // Ref to always hold the latest delete handler (avoids stale closure in event listener)
   const deleteRef = useRef(null)
+  const aceRef = useRef(null)
+
+  const { remoteCursors } = useCollabCursors(aceRef.current, selectedFile)
 
   // Wait for orchestrator to confirm container is ready, then load file tree
   useEffect(() => {
@@ -374,6 +378,7 @@ function App() {
                     showPrintMargin={false}
                     showGutter={true}
                     highlightActiveLine={true}
+                    onLoad={(editor) => { aceRef.current = editor; }}
                     setOptions={{
                       enableBasicAutocompletion: true,
                       enableLiveAutocompletion: true,
@@ -383,6 +388,25 @@ function App() {
                       fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
                     }}
                   />
+                  {/* Remote cursor presence badges */}
+                  {[...remoteCursors.entries()]
+                    .filter(([, c]) => c.file === selectedFile)
+                    .map(([socketId, cursor]) => (
+                      <div
+                        key={socketId}
+                        style={{
+                          position: 'absolute', top: 8, right: 8,
+                          background: cursor.color, color: '#fff',
+                          fontSize: '0.7rem', padding: '2px 8px',
+                          borderRadius: '10px', zIndex: 10,
+                          pointerEvents: 'none', marginBottom: 4,
+                          display: 'inline-block',
+                        }}
+                      >
+                        👤 {socketId.slice(0, 6)}
+                      </div>
+                    ))
+                  }
                 </div>
               </>
             ) : (
