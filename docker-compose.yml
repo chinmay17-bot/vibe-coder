@@ -10,6 +10,17 @@ services:
       - .env
     restart: unless-stopped
 
+  # React client — built and served via Nginx
+  client:
+    build:
+      context: ./editor/client
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
   # Orchestrator — spawns one editor-server container per browser session
   orchestrator:
     build:
@@ -17,6 +28,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+      - "1234:1234"
     environment:
       - FASTAPI_URL=http://fastapi:8000
     volumes:

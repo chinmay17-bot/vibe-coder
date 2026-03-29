@@ -3,6 +3,9 @@ const express = require('express');
 const { Server: SocketServer } = require('socket.io');
 const Docker = require('dockerode');
 const cors = require('cors');
+const { WebSocketServer } = require('ws');
+const Y = require('yjs');
+const { setupWSConnection, docs } = require('y-websocket/bin/utils');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,6 +15,50 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 app.use(cors());
 app.use(express.json());
 
+// ── Yjs WebSocket server (CRDT sync) on port 1234 ──
+const yjsServer = new WebSocketServer({ port: 1234 });
+yjsServer.on('connection', (ws, req) => {
+    const docName = decodeURIComponent(req.url?.slice(1).split('?')[0] || '');
+    if (!docName) return ws.close();
+
+    // setupWSConnection handles all Yjs sync protocol correctly
+    setupWSConnection(ws, req, { docName, gc: true });
+
+    // After connection, hook into the doc for file persistence
+    setTimeout(() => {
+        const doc = docs.get(docName);
+        if (!doc) return;
+        const onUpdate = () => scheduleFilePersist(docName);
+        doc.on('update', onUpdate);
+        ws.on('close', () => doc.off('update', onUpdate));
+    }, 50);
+});
+
+// Persist Yjs doc content to the session container (debounced 500ms)
+const persistDebounces = new Map();
+async function scheduleFilePersist(docName) {
+    if (persistDebounces.has(docName)) clearTimeout(persistDebounces.get(docName));
+    persistDebounces.set(docName, setTimeout(async () => {
+        persistDebounces.delete(docName);
+        const doc = docs.get(docName);
+        if (!doc) return;
+        const [sessionId, ...fileParts] = docName.split('/');
+        const filePath = fileParts.join('/');
+        const session = sessions.get(sessionId);
+        if (!session) return;
+        const ytext = doc.getText('content');
+        const content = ytext.toString();
+        try {
+            await fetch(`http://${session.host}:9000/files/content-write`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: filePath, content }),
+            });
+        } catch (err) {
+            console.error(`[Yjs] Failed to persist ${docName}:`, err.message);
+        }
+    }, 500));
+}
 // sessionId -> { container, port, host }
 const sessions = new Map();
 // sessionId -> Set of socket ids sharing that session

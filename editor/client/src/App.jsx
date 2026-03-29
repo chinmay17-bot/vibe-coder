@@ -7,6 +7,7 @@ import FileTree, { ContextMenu, InlineInput } from "./components/tree"
 import socket from "./socket"
 import ReactAce from "react-ace";
 import { useCollabCursors } from "./hooks/useCollabCursors"
+import { useYjsDoc } from "./hooks/useYjsDoc"
 
 import "ace-builds/src-noconflict/mode-javascript";
 import "ace-builds/src-noconflict/mode-python";
@@ -92,13 +93,58 @@ function App() {
   const [chatVisible, setChatVisible] = useState(true)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [inlineInput, setInlineInput] = useState(null)
-  const isSaved = selectedFileContent === code
+  const isSaved = true // Yjs handles persistence — no unsaved state
 
-  // Ref to always hold the latest delete handler (avoids stale closure in event listener)
   const deleteRef = useRef(null)
   const aceRef = useRef(null)
 
+  // Yjs CRDT doc for the currently open file
+  const { ytext, synced } = useYjsDoc(sessionId, selectedFile, selectedFileContent)
+
   const { remoteCursors } = useCollabCursors(aceRef.current, selectedFile)
+
+  // Bind Yjs text to the Ace editor
+  useEffect(() => {
+    if (!aceRef.current || !ytext || !synced) return
+    const editor = aceRef.current
+    const session = editor.getSession()
+
+    // Set initial content from Yjs
+    const yjsContent = ytext.toString()
+    if (session.getValue() !== yjsContent) {
+      session.setValue(yjsContent)
+    }
+
+    // Apply remote Yjs changes to Ace
+    const onYjsUpdate = () => {
+      const newContent = ytext.toString()
+      if (session.getValue() !== newContent) {
+        const pos = editor.getCursorPosition()
+        session.setValue(newContent)
+        editor.moveCursorToPosition(pos)
+      }
+    }
+    ytext.observe(onYjsUpdate)
+
+    // Apply local Ace changes to Yjs
+    const onAceChange = (delta) => {
+      const newVal = session.getValue()
+      const yjsVal = ytext.toString()
+      if (newVal === yjsVal) return
+      // Replace entire doc content as a single transaction
+      ytext.doc.transact(() => {
+        ytext.delete(0, ytext.length)
+        ytext.insert(0, newVal)
+      })
+      setCode(newVal)
+    }
+    session.on('change', onAceChange)
+
+    return () => {
+      ytext.unobserve(onYjsUpdate)
+      session.off('change', onAceChange)
+    }
+  }, [ytext, synced])
 
   // Wait for orchestrator to confirm container is ready, then load file tree
   useEffect(() => {
@@ -180,24 +226,7 @@ function App() {
   useEffect(() => {
     if (!sessionReady) return
     socket.on('file:refresh', getFileTree)
-
-    // Sync editor content when another tab in the same session saves a file
-    socket.on('file:synced', ({ path: filePath, content }) => {
-      getFileTree()
-      // If the synced file is currently open, update the editor
-      setSelectedFile(prev => {
-        if (prev === filePath || '/' + filePath === prev || filePath === prev.replace(/^\//, '')) {
-          setSelectedFileContent(content)
-          setCode(content)
-        }
-        return prev
-      })
-    })
-
-    return () => {
-      socket.off('file:refresh', getFileTree)
-      socket.off('file:synced')
-    }
+    return () => { socket.off('file:refresh', getFileTree) }
   }, [sessionReady])
 
   // Listen for context menu events from file tree nodes
@@ -218,16 +247,12 @@ function App() {
     return () => window.removeEventListener('tree-context-menu', handleCtxEvent)
   }, [])
 
-  // Auto-save after 3 seconds of inactivity
+  // Auto-refresh file tree on changes
   useEffect(() => {
-    if (code && !isSaved && selectedFile) {
-      const timer = setTimeout(() => {
-        socket.emit('file:change', { path: selectedFile, content: code })
-        setSelectedFileContent(code)
-      }, 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [code, selectedFile, isSaved])
+    if (!sessionReady) return
+    socket.on('file:refresh', getFileTree)
+    return () => { socket.off('file:refresh', getFileTree) }
+  }, [sessionReady])
 
   const handleFileSelect = (path) => {
     setSelectedFile(path)
@@ -253,10 +278,7 @@ function App() {
   }
 
   const handleSaveNow = () => {
-    if (selectedFile && code) {
-      socket.emit('file:change', { path: selectedFile, content: code })
-      setSelectedFileContent(code)
-    }
+    // No-op: Yjs persists automatically on every change
   }
 
   // ── File management handlers ──
@@ -368,8 +390,6 @@ function App() {
                 </div>
                 <div className="ace-wrapper">
                   <AceEditor
-                    value={code}
-                    onChange={(val) => setCode(val)}
                     mode={getEditorMode(selectedFile)}
                     theme="one_dark"
                     width="100%"

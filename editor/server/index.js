@@ -81,6 +81,22 @@ app.get('/files/content', async (req, res) => {
     }
 });
 
+// ── WRITE FILE CONTENT (used by Yjs persistence) ──
+app.post('/files/content-write', async (req, res) => {
+    try {
+        const { path: filePath, content } = req.body;
+        if (!filePath) return res.status(400).json({ error: 'No path provided' });
+        const safePath = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '');
+        const fullPath = path.join(userDir, safePath);
+        const dir = path.dirname(fullPath);
+        if (!fsSync.existsSync(dir)) await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf-8');
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 // ── CREATE FILE ──
 app.post('/files/create', async (req, res) => {
     try {

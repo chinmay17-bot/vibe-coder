@@ -15,7 +15,9 @@
     "react": "^19.2.4",
     "react-ace": "^14.0.1",
     "react-dom": "^19.2.4",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "y-websocket": "^2.0.4",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
