@@ -176,7 +176,24 @@ function App() {
   useEffect(() => {
     if (!sessionReady) return
     socket.on('file:refresh', getFileTree)
-    return () => { socket.off('file:refresh', getFileTree) }
+
+    // Sync editor content when another tab in the same session saves a file
+    socket.on('file:synced', ({ path: filePath, content }) => {
+      getFileTree()
+      // If the synced file is currently open, update the editor
+      setSelectedFile(prev => {
+        if (prev === filePath || '/' + filePath === prev || filePath === prev.replace(/^\//, '')) {
+          setSelectedFileContent(content)
+          setCode(content)
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      socket.off('file:refresh', getFileTree)
+      socket.off('file:synced')
+    }
   }, [sessionReady])
 
   // Listen for context menu events from file tree nodes

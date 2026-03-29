@@ -12,8 +12,10 @@ const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 app.use(cors());
 app.use(express.json());
 
-// sessionId -> { container, port }
+// sessionId -> { container, port, host }
 const sessions = new Map();
+// sessionId -> Set of socket ids sharing that session
+const sessionSockets = new Map();
 // Track in-progress spawns to prevent duplicate containers for the same session
 const spawning = new Map();
 
@@ -245,6 +247,21 @@ async function attachSession(socket, sessionId, forceNew) {
     // Store sessionId on socket for cleanup
     socket.data.sessionId = sessionId;
 
+    // Track all sockets sharing this session
+    if (!sessionSockets.has(sessionId)) sessionSockets.set(sessionId, new Set());
+    sessionSockets.get(sessionId).add(socket.id);
+
+    // Helper: broadcast an event to all OTHER sockets in the same session
+    const broadcastToSession = (event, data) => {
+        const peers = sessionSockets.get(sessionId);
+        if (!peers) return;
+        for (const peerId of peers) {
+            if (peerId === socket.id) continue;
+            const peer = io.sockets.sockets.get(peerId);
+            if (peer) peer.emit(event, data);
+        }
+    };
+
     // Forward all events to the session container via a proxy socket
     const { io: ioClient } = require('socket.io-client');
     const upstream = ioClient(`http://${session.host}:9000`);
@@ -260,9 +277,23 @@ async function attachSession(socket, sessionId, forceNew) {
         upstream.on(event, (data) => socket.emit(event, data));
     });
 
+    // When this socket saves a file, notify peers to refresh their file tree and editor
+    socket.on('file:change', (data) => {
+        // Broadcast to peers: refresh file tree
+        broadcastToSession('file:refresh', data.path);
+        // Broadcast the actual content change so peers update their editor
+        broadcastToSession('file:synced', data);
+    });
+
     socket.on('disconnect', async () => {
         console.log(`[Orchestrator] Socket ${socket.id} disconnected`);
         upstream.disconnect();
+        // Remove from session group
+        const peers = sessionSockets.get(sessionId);
+        if (peers) {
+            peers.delete(socket.id);
+            if (peers.size === 0) sessionSockets.delete(sessionId);
+        }
         setTimeout(async () => {
             const remaining = [...io.sockets.sockets.values()].filter(
                 s => s.data.sessionId === sessionId
