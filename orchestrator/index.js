@@ -93,9 +93,12 @@ function getFreePort() {
 // Detect the compose network name dynamically
 async function getNetworkName() {
     const networks = await docker.listNetworks();
-    const match = networks.find(n => n.Name.endsWith('_default') && n.Name.includes('coder'));
+    // Try to find compose default network — match any _default network that's not predefined
+    const match = networks.find(n =>
+        n.Name.endsWith('_default') &&
+        !['bridge', 'host', 'none'].includes(n.Name)
+    );
     if (match) return match.Name;
-    // fallback: just use host networking
     return null;
 }
 
