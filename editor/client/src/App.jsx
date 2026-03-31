@@ -107,42 +107,49 @@ function App() {
   useEffect(() => {
     if (!aceRef.current || !ytext || !synced) return
     const editor = aceRef.current
-    const session = editor.getSession()
+    const aceSession = editor.getSession()
+    let isApplyingRemote = false
 
     // Set initial content from Yjs
-    const yjsContent = ytext.toString()
-    if (session.getValue() !== yjsContent) {
-      session.setValue(yjsContent)
+    const initial = ytext.toString()
+    if (aceSession.getValue() !== initial) {
+      isApplyingRemote = true
+      aceSession.setValue(initial)
+      isApplyingRemote = false
     }
 
-    // Apply remote Yjs changes to Ace
+    // Yjs → Ace: remote change came in, update editor
     const onYjsUpdate = () => {
-      const newContent = ytext.toString()
-      if (session.getValue() !== newContent) {
-        const pos = editor.getCursorPosition()
-        session.setValue(newContent)
-        editor.moveCursorToPosition(pos)
-      }
+      if (isApplyingRemote) return
+      const yjsVal = ytext.toString()
+      const aceVal = aceSession.getValue()
+      if (yjsVal === aceVal) return
+      isApplyingRemote = true
+      const pos = editor.getCursorPosition()
+      aceSession.setValue(yjsVal)
+      editor.moveCursorToPosition(pos)
+      isApplyingRemote = false
     }
     ytext.observe(onYjsUpdate)
 
-    // Apply local Ace changes to Yjs
-    const onAceChange = (delta) => {
-      const newVal = session.getValue()
+    // Ace → Yjs: local change, push to Yjs doc
+    const onAceChange = () => {
+      if (isApplyingRemote) return
+      const aceVal = aceSession.getValue()
       const yjsVal = ytext.toString()
-      if (newVal === yjsVal) return
-      // Replace entire doc content as a single transaction
+      if (aceVal === yjsVal) return
+      isApplyingRemote = true
       ytext.doc.transact(() => {
         ytext.delete(0, ytext.length)
-        ytext.insert(0, newVal)
+        ytext.insert(0, aceVal)
       })
-      setCode(newVal)
+      isApplyingRemote = false
     }
-    session.on('change', onAceChange)
+    aceSession.on('change', onAceChange)
 
     return () => {
       ytext.unobserve(onYjsUpdate)
-      session.off('change', onAceChange)
+      aceSession.off('change', onAceChange)
     }
   }, [ytext, synced])
 
