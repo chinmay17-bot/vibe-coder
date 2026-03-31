@@ -286,6 +286,16 @@ io.on('connection', (socket) => {
     });
 
     socket.on('terminal:write', (data) => {
+        // Block attempts to escape or damage the host
+        const blocked = [
+            'docker', 'kubectl', 'nsenter', 'chroot',
+            '/proc/sysrq', 'mount ', 'umount',
+        ];
+        const lower = (typeof data === 'string' ? data : '').toLowerCase();
+        if (blocked.some(cmd => lower.includes(cmd))) {
+            io.emit('terminal:data', '\r\n\x1b[31m[blocked: command not allowed]\x1b[0m\r\n');
+            return;
+        }
         ptyProcess.write(data);
     });
 

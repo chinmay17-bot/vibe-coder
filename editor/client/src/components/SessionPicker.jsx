@@ -9,7 +9,8 @@ const SessionPicker = ({ onSessionReady }) => {
 
     const fetchSessions = async () => {
         try {
-            const res = await fetch('http://localhost:3000/sessions');
+            const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
+            const res = await fetch(`${API}/sessions`);
             const data = await res.json();
             setSessions(data.sessions || []);
         } catch {
@@ -49,7 +50,8 @@ const SessionPicker = ({ onSessionReady }) => {
 
     const handleDelete = async (e, sessionId) => {
         e.stopPropagation();
-        await fetch(`http://localhost:3000/sessions/${sessionId}`, { method: 'DELETE' });
+        const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
+        await fetch(`${API}/sessions/${sessionId}`, { method: 'DELETE' });
         fetchSessions();
     };
 

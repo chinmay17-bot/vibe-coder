@@ -15,9 +15,15 @@ RUN npm install
 
 COPY . .
 
-# The user workspace lives here — mounted as a volume for persistence
-RUN mkdir -p /workspace
+# Create a non-root user for the sandbox
+RUN useradd -m -s /bin/bash sandboxuser && \
+    mkdir -p /workspace && \
+    chown sandboxuser:sandboxuser /workspace
 
+# Drop to non-root
+USER sandboxuser
+
+# The user workspace lives here — mounted as a volume for persistence
 EXPOSE 9000
 
-CMD ["node", "index.js"]
+CMD ["node", "/app/index.js"]

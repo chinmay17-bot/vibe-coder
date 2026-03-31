@@ -65,6 +65,17 @@ const sessions = new Map();
 const sessionSockets = new Map();
 // Track in-progress spawns to prevent duplicate containers for the same session
 const spawning = new Map();
+// Auto-kill idle sessions after 30 minutes
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const sessionTimers = new Map();
+
+function resetSessionTimer(sessionId) {
+    if (sessionTimers.has(sessionId)) clearTimeout(sessionTimers.get(sessionId));
+    sessionTimers.set(sessionId, setTimeout(async () => {
+        console.log(`[Orchestrator] Session ${sessionId} timed out — destroying`);
+        await destroySession(sessionId);
+    }, SESSION_TIMEOUT_MS));
+}
 
 // Ask the OS for a free port
 function getFreePort() {
@@ -106,6 +117,17 @@ async function spawnContainer(sessionId) {
         PortBindings: { '9000/tcp': [{ HostPort: String(port) }] },
         Binds: [`coder-session-${sessionId}:/workspace`],
         AutoRemove: true,
+        // Resource limits — prevent fork bombs and crypto mining
+        Memory: 512 * 1024 * 1024,        // 512MB RAM max
+        MemorySwap: 512 * 1024 * 1024,    // no swap
+        CpuPeriod: 100000,
+        CpuQuota: 50000,                   // 50% of one CPU core
+        PidsLimit: 100,                    // max 100 processes (kills fork bombs)
+        // Security hardening
+        ReadonlyRootfs: false,             // workspace needs writes
+        CapDrop: ['ALL'],                  // drop all Linux capabilities
+        CapAdd: ['CHOWN', 'SETUID', 'SETGID'], // only what node-pty needs
+        SecurityOpt: ['no-new-privileges:true'],
     };
 
     if (networkName) {
@@ -159,6 +181,10 @@ async function destroySession(sessionId) {
     const session = sessions.get(sessionId);
     if (!session) return;
     sessions.delete(sessionId);
+    if (sessionTimers.has(sessionId)) {
+        clearTimeout(sessionTimers.get(sessionId));
+        sessionTimers.delete(sessionId);
+    }
     try {
         await session.container.stop({ t: 2 });
         console.log(`[Orchestrator] Container for session ${sessionId} stopped`);
@@ -272,6 +298,7 @@ async function attachSession(socket, sessionId, forceNew) {
                 sessions.set(sessionId, session);
                 socket.emit('session:status', { status: 'ready', sessionId });
                 console.log(`[Orchestrator] Session ${sessionId} ready on port ${session.port}`);
+                resetSessionTimer(sessionId);
             } catch (err) {
                 spawning.delete(sessionId);
                 console.error(`[Orchestrator] Failed to spawn container:`, err.message);
@@ -317,7 +344,10 @@ async function attachSession(socket, sessionId, forceNew) {
     const FORWARD_TO_CLIENT = ['terminal:data', 'file:refresh', 'ai:response', 'ai:file-created', 'ai:project-created'];
 
     FORWARD_TO_UPSTREAM.forEach(event => {
-        socket.on(event, (data) => upstream.emit(event, data));
+        socket.on(event, (data) => {
+            resetSessionTimer(sessionId); // reset idle timer on any activity
+            upstream.emit(event, data);
+        });
     });
 
     FORWARD_TO_CLIENT.forEach(event => {

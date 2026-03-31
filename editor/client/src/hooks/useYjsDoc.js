@@ -21,7 +21,8 @@ export function useYjsDoc(sessionId, filePath, initialContent) {
         const yt = doc.getText('content');
         setYtext(yt);
 
-        const provider = new WebsocketProvider('ws://localhost:1234', docName, doc, {
+        const YJS_URL = import.meta.env.VITE_YJS_URL || 'ws://localhost:1234';
+        const provider = new WebsocketProvider(YJS_URL, docName, doc, {
             connect: true,
             resyncInterval: -1,
         });
