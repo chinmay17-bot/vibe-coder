@@ -1,0 +1,78 @@
+/* ── GLOBAL STYLES ── */
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* ══════════════════════════════
+   FILE TREE STYLES
+   ══════════════════════════════ */
+.tree-root {
+  padding: 2px 0;
+}
+
+.tree-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted, #6e7681);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary, #8b949e);
+  transition: background 120ms ease, color 120ms ease;
+  border-radius: 3px;
+  margin: 0 4px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-row:hover {
+  background: var(--bg-hover, #292e36);
+  color: var(--text-primary, #e6edf3);
+}
+
+.tree-row.tree-file:active {
+  background: var(--bg-active, #2d333b);
+}
+
+.tree-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted, #6e7681);
+  transition: transform 120ms ease;
+  flex-shrink: 0;
+}
+
+.tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.tree-dir-icon,
+.tree-file-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-ui, 'Inter', sans-serif);
+  font-size: 13px;
+}
+
+.tree-children {
+  /* no extra padding — handled by depth prop */
+}

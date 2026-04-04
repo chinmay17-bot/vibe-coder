@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colorful Calculator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(to bottom, #0d1117, #1a1a2e);
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .header {
+            background: linear-gradient(to right, #8e24aa, #ff6f60);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            text-align: center;
+            width: 300px;
+        }
+        .header h1 {
+            font-size: 24px;
+            color: #FFFFFF;
+            font-weight: bold;
+            margin: 0;
+        }
+        .main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            width: 300px;
+        }
+        .display {
+            background: linear-gradient(to right, #4caf50, #ff9800);
+            padding: 10px;
+            border: 1px solid #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            font-size: 48px;
+            color: #FFFFFF;
+            height: 100px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-gap: 10px;
+            margin-top: 20px;
+        }
+        .button {
+            background: linear-gradient(to right, #33CC33, #00FF00);
+            padding: 10px;
+            border: none;
+            border-radius: 50%;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            font-size: 18px;
+            color: #FFFFFF;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .button:hover {
+            background: linear-gradient(to right, #00FF00, #33CC33);
+            transform: scale(1.05);
+        }
+        .button:active {
+            transform: scale(0.95);
+        }
+        .history {
+            background: linear-gradient(to right, #4caf50, #ff9800);
+            padding: 10px;
+            border: 1px solid #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            font-size: 18px;
+            color: #FFFFFF;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        @media (max-width: 768px) {
+            .main {
+                width: 100%;
+                padding: 10px;
+            }
+            .display {
+                height: 80px;
+                font-size: 36px;
+            }
+            .button-grid {
+                grid-gap: 5px;
+            }
+            .button {
+                font-size: 14px;
+                width: 40px;
+                height: 40px;
+            }
+            .history {
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Colorful Calculator</h1>
+    </div>
+    <div class="main">
+        <div class="display" id="display">0</div>
+        <div class="button-grid">
+            <button class="button" id="button-7">7</button>
+            <button class="button" id="button-8">8</button>
+            <button class="button" id="button-9">9</button>
+            <button class="button" id="button-divide">/</button>
+            <button class="button" id="button-4">4</button>
+            <button class="button" id="button-5">5</button>
+            <button class="button" id="button-6">6</button>
+            <button class="button" id="button-multiply">*</button>
+            <button class="button" id="button-1">1</button>
+            <button class="button" id="button-2">2</button>
+            <button class="button" id="button-3">3</button>
+            <button class="button" id="button-subtract">-</button>
+            <button class="button" id="button-0">0</button>
+            <button class="button" id="button-decimal">.</button>
+            <button class="button" id="button-equals">=</button>
+            <button class="button" id="button-add">+</button>
+        </div>
+        <div class="history" id="history"></div>
+    </div>
+    <script>
+        let display = document.getElementById('display');
+        let buttons = document.querySelectorAll('.button');
+        let currentNumber = '';
+        let previousNumber = '';
+        let operator = '';
+        let history = document.getElementById('history');
+        buttons.forEach(button => {
+            button.addEventListener('click', () => {
+                let id = button.id;
+                if (id === 'button-0' || id === 'button-1' || id === 'button-2' || id === 'button-3' || id === 'button-4' || id === 'button-5' || id === 'button-6' || id === 'button-7' || id === 'button-8' || id === 'button-9') {
+                    currentNumber += id.substring(7);
+                    display.textContent = currentNumber;
+                } else if (id === 'button-decimal') {
+                    if (!currentNumber.includes('.')) {
+                        currentNumber += '.';
+                        display.textContent = currentNumber;
+                    }
+                } else if (id === 'button-add' || id === 'button-subtract' || id === 'button-multiply' || id === 'button-divide') {
+                    previousNumber = currentNumber;
+                    operator = id.substring(7);
+                    currentNumber = '';
+                    display.textContent = '0';
+                } else if (id === 'button-equals') {
+                    if (previousNumber !== '' && currentNumber !== '') {
+                        let result;
+                        switch (operator) {
+                            case 'add':
+                                result = parseFloat(previousNumber) + parseFloat(currentNumber);
+                                break;
+                            case 'subtract':
+                                result = parseFloat(previousNumber) - parseFloat(currentNumber);
+                                break;
+                            case 'multiply':
+                                result = parseFloat(previousNumber) * parseFloat(currentNumber);
+                                break;
+                            case 'divide':
+                                if (currentNumber !== '0') {
+                                    result = parseFloat(previousNumber) / parseFloat(currentNumber);
+                                } else {
+                                    result = 'Error';
+                                }
+                                break;
+                            default:
+                                result = 'Error';
+                        }
+                        display.textContent = result;
+                        let calculation = `${previousNumber} ${getOperatorSymbol(operator)} ${currentNumber} = ${result}`;
+                        let paragraph = document.createElement('p');
+                        paragraph.textContent = calculation;
+                        history.appendChild(paragraph);
+                        previousNumber = '';
+                        currentNumber = '';
+                    }
+                }
+            });
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === '0' || event.key === '1' || event.key === '2' || event.key === '3' || event.key === '4' || event.key === '5' || event.key === '6' || event.key === '7' || event.key === '8' || event.key === '9') {
+                currentNumber += event.key;
+                display.textContent = currentNumber;
+            } else if (event.key === '.') {
+                if (!currentNumber.includes('.')) {
+                    currentNumber += '.';
+                    display.textContent = currentNumber;
+                }
+            } else if (event.key === '+' || event.key === '-' || event.key === '*' || event.key === '/') {
+                previousNumber = currentNumber;
+                operator = event.key;
+                currentNumber = '';
+                display.textContent = '0';
+            } else if (event.key === '=' || event.key === 'Enter') {
+                if (previousNumber !== '' && currentNumber !== '') {
+                    let result;
+                    switch (operator) {
+                        case '+':
+                            result = parseFloat(previousNumber) + parseFloat(currentNumber);
+                            break;
+                        case '-':
+                            result = parseFloat(previousNumber) - parseFloat(currentNumber);
+                            break;
+                        case '*':
+                            result = parseFloat(previousNumber) * parseFloat(currentNumber);
+                            break;
+                        case '/':
+                            if (currentNumber !== '0') {
+                                result = parseFloat(previousNumber) / parseFloat(currentNumber);
+                            } else {
+                                result = 'Error';
+                            }
+                            break;
+                        default:
+                            result = 'Error';
+                    }
+                    display.textContent = result;
+                    let calculation = `${previousNumber} ${getOperatorSymbol(operator)} ${currentNumber} = ${result}`;
+                    let paragraph = document.createElement('p');
+                    paragraph.textContent = calculation;
+                    history.appendChild(paragraph);
+                    previousNumber = '';
+                    currentNumber = '';
+                }
+            }
+        });
+        function getOperatorSymbol(operator) {
+            switch (operator) {
+                case '+':
+                    return '+';
+                case '-':
+                    return '-';
+                case '*':
+                    return '*';
+                case '/':
+                    return '/';
+                case 'add':
+                    return '+';
+                case 'subtract':
+                    return '-';
+                case 'multiply':
+                    return '*';
+                case 'divide':
+                    return '/';
+                default:
+                    return '';
+            }
+        }
+    </script>
+</body>
+</html>

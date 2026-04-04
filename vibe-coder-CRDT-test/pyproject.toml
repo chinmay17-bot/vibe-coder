@@ -1,0 +1,19 @@
+[project]
+name = "coder-assist-main"
+version = "0.1.0"
+description = "AI-powered collaborative IDE with multi-language code generation and real-time CRDT collaboration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "groq>=0.31.0",
+    "langchain>=0.3.27",
+    "langchain-core>=0.3.72",
+    "langchain-groq>=0.3.7",
+    "langgraph>=0.6.3",
+    "pip>=25.2",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.1",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "sse-starlette>=2.1.0",
+]
