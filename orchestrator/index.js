@@ -89,8 +89,6 @@ async function getNetworkName() {
     if (match) return match.Name;
     return null;
 }
-    return null;
-}
 
 async function spawnContainer(sessionId) {
     const port = await getFreePort();
