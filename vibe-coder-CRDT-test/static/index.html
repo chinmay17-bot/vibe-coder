@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI DevTeam Workspace — Coder Buddy</title>
+    <meta name="description" content="AI-powered development team that plans, architects, and codes your projects in real-time.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- HEADER -->
+    <header id="app-header">
+        <div class="header-left">
+            <div class="logo-icon">⚡</div>
+            <h1>Coder Buddy</h1>
+            <span class="badge">AI DevTeam</span>
+        </div>
+        <div class="header-right">
+            <div id="status-indicator" class="status-idle">
+                <span class="status-dot"></span>
+                <span class="status-text">Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- AGENT PIPELINE TRACKER -->
+    <section id="pipeline-tracker">
+        <div class="pipeline-step" data-agent="planner" id="step-planner">
+            <div class="step-icon">🧠</div>
+            <div class="step-label">Planner</div>
+            <div class="step-status">Waiting</div>
+        </div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-agent="architect" id="step-architect">
+            <div class="step-icon">📐</div>
+            <div class="step-label">Architect</div>
+            <div class="step-status">Waiting</div>
+        </div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-agent="coder" id="step-coder">
+            <div class="step-icon">💻</div>
+            <div class="step-label">Coder</div>
+            <div class="step-status">Waiting</div>
+        </div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-agent="done" id="step-done">
+            <div class="step-icon">✅</div>
+            <div class="step-label">Done</div>
+            <div class="step-status">Waiting</div>
+        </div>
+    </section>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content">
+        <!-- LEFT: Activity Feed -->
+        <section id="activity-panel">
+            <div class="panel-header">
+                <h2>💬 Activity Feed</h2>
+            </div>
+            <div id="activity-feed" class="feed-container">
+                <div class="welcome-message">
+                    <div class="welcome-icon">👨‍💻</div>
+                    <h3>Welcome to Coder Buddy!</h3>
+                    <p>Describe what you want to build and watch the AI team work in real-time.</p>
+                </div>
+            </div>
+            <div id="input-area">
+                <div class="input-wrapper">
+                    <textarea id="prompt-input" placeholder="Describe what you want to build..." rows="2"></textarea>
+                    <button id="send-btn" type="button">
+                        <span class="btn-text">Send</span>
+                        <span class="btn-icon">→</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: Workspace -->
+        <section id="workspace-panel">
+            <div class="panel-header">
+                <div class="tab-bar" id="workspace-tabs">
+                    <button class="tab-btn active" data-tab="files" id="tab-files">📁 Files</button>
+                    <button class="tab-btn" data-tab="code" id="tab-code">📝 Code</button>
+                    <button class="tab-btn" data-tab="preview" id="tab-preview">🖥️ Preview</button>
+                </div>
+            </div>
+
+            <!-- FILES TAB -->
+            <div class="tab-content active" id="content-files">
+                <div class="files-panel">
+                    <div id="files-list" class="files-list">
+                        <div class="empty-state">
+                            <div class="empty-icon">📂</div>
+                            <p>Files will appear here as agents generate them.</p>
+                        </div>
+                    </div>
+                    <div id="plan-details" class="plan-details hidden">
+                        <h3>📋 Project Plan</h3>
+                        <div id="plan-content"></div>
+                    </div>
+                    <div id="arch-details" class="arch-details hidden">
+                        <h3>🏗️ Architecture Steps</h3>
+                        <div id="arch-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CODE TAB -->
+            <div class="tab-content" id="content-code">
+                <div class="code-toolbar">
+                    <div class="code-file-tabs" id="code-file-tabs"></div>
+                    <button id="run-btn" class="run-btn" title="Run current file">
+                        <span class="run-icon">▶</span>
+                        <span class="run-text">Run</span>
+                    </button>
+                </div>
+                <div class="editor-container" id="editor-container"></div>
+                <div class="terminal-panel" id="terminal-panel">
+                    <div class="terminal-header">
+                        <span class="terminal-title">⬛ Terminal Output</span>
+                        <button class="terminal-clear-btn" id="terminal-clear-btn" title="Clear">✕</button>
+                    </div>
+                    <pre class="terminal-output" id="terminal-output">Run code to see output here...</pre>
+                </div>
+            </div>
+
+            <!-- PREVIEW TAB -->
+            <div class="tab-content" id="content-preview">
+                <div class="preview-container">
+                    <iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+                    <div class="preview-empty" id="preview-empty">
+                        <div class="empty-icon">🖥️</div>
+                        <p>Live preview will render here once HTML code is generated.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
