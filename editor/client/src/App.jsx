@@ -1,10 +1,13 @@
 import Terminal from "./components/terminal"
 import Chatbot from "./components/Chatbot"
+import SessionPicker from "./components/SessionPicker"
 import './App.css'
 import { useEffect, useState, useCallback, useRef } from "react"
 import FileTree, { ContextMenu, InlineInput } from "./components/tree"
 import socket from "./socket"
 import ReactAce from "react-ace";
+import { useCollabCursors } from "./hooks/useCollabCursors"
+import { useYjsDoc } from "./hooks/useYjsDoc"
 
 import "ace-builds/src-noconflict/mode-javascript";
 import "ace-builds/src-noconflict/mode-python";
@@ -68,18 +71,19 @@ function getFileName(filePath) {
   return filePath.split('/').pop();
 }
 
-// In local mode, all REST calls go directly to the editor server on port 9000
-const API = 'http://localhost:9000';
+// Helper: all REST calls go to orchestrator with session header
+const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
 const apiFetch = (path, opts = {}) => {
+  const sid = sessionStorage.getItem('sessionId');
   return fetch(`${API}${path}`, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    headers: { 'x-session-id': sid, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 };
 
 function App() {
-  // In local mode, skip session picking entirely — start ready immediately
   const [sessionReady, setSessionReady] = useState(false)
+  const [sessionId, setSessionId] = useState(sessionStorage.getItem('sessionId'))
   const [fileTree, setFileTree] = useState({})
   const [selectedFile, setSelectedFile] = useState('')
   const [selectedFileContent, setSelectedFileContent] = useState('')
@@ -89,43 +93,68 @@ function App() {
   const [chatVisible, setChatVisible] = useState(true)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [inlineInput, setInlineInput] = useState(null)
-  const [isRunning, setIsRunning] = useState(false)
-  const [runOutput, setRunOutput] = useState('')
-  const [showRunOutput, setShowRunOutput] = useState(false)
-  const [previewVisible, setPreviewVisible] = useState(false)
-  const [renameInput, setRenameInput] = useState(null)
-  const [connectionError, setConnectionError] = useState(false)
   const isSaved = true
 
   const deleteRef = useRef(null)
   const aceRef = useRef(null)
-  const fileSelectRef = useRef(null)
 
-  // Auto-connect: once socket connects, mark as ready and load file tree
+  const { ytext, synced } = useYjsDoc(sessionId, selectedFile, selectedFileContent)
+  const { remoteCursors } = useCollabCursors(aceRef.current, selectedFile)
+
+  // Bind Yjs text to the Ace editor
   useEffect(() => {
-    const onConnect = () => {
-      console.log('[App] Socket connected, loading file tree...');
-      setSessionReady(true);
-      setConnectionError(false);
-      getFileTree();
-    };
+    if (!aceRef.current || !ytext || !synced) return
+    const editor = aceRef.current
+    const aceSession = editor.getSession()
+    let isApplyingRemote = false
 
-    const onConnectError = () => {
-      setConnectionError(true);
-    };
-
-    if (socket.connected) {
-      // Already connected
-      onConnect();
+    const initial = ytext.toString()
+    if (aceSession.getValue() !== initial) {
+      isApplyingRemote = true
+      aceSession.setValue(initial)
+      isApplyingRemote = false
     }
 
-    socket.on('connect', onConnect);
-    socket.on('connect_error', onConnectError);
+    const onYjsUpdate = () => {
+      if (isApplyingRemote) return
+      const yjsVal = ytext.toString()
+      if (aceSession.getValue() === yjsVal) return
+      isApplyingRemote = true
+      const pos = editor.getCursorPosition()
+      aceSession.setValue(yjsVal)
+      editor.moveCursorToPosition(pos)
+      isApplyingRemote = false
+    }
+    ytext.observe(onYjsUpdate)
+
+    const onAceChange = () => {
+      if (isApplyingRemote) return
+      const aceVal = aceSession.getValue()
+      if (aceVal === ytext.toString()) return
+      isApplyingRemote = true
+      ytext.doc.transact(() => {
+        ytext.delete(0, ytext.length)
+        ytext.insert(0, aceVal)
+      })
+      isApplyingRemote = false
+    }
+    aceSession.on('change', onAceChange)
 
     return () => {
-      socket.off('connect', onConnect);
-      socket.off('connect_error', onConnectError);
-    };
+      ytext.unobserve(onYjsUpdate)
+      aceSession.off('change', onAceChange)
+    }
+  }, [ytext, synced])
+
+  // Session status listener
+  useEffect(() => {
+    socket.on('session:status', ({ status }) => {
+      if (status === 'ready') {
+        setSessionReady(true)
+        setTimeout(getFileTree, 500)
+      }
+    })
+    return () => socket.off('session:status')
   }, [])
 
   const getFileTree = async () => {
@@ -377,59 +406,14 @@ function App() {
     setInlineInput(null)
   }
 
-  // Show connection error if server isn't reachable
+  // Show session picker if not ready
   if (!sessionReady) {
     return (
-      <div className="picker-root" style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        height: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: "'Inter', 'Segoe UI', sans-serif"
-      }}>
-        <div style={{
-          background: '#161b22', border: '1px solid #30363d', borderRadius: '12px',
-          padding: '2.5rem 2rem', width: '420px', textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>⚡</div>
-          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 600 }}>Coder Buddy IDE</h2>
-          {connectionError ? (
-            <>
-              <p style={{ color: '#f85149', fontSize: '0.9rem', margin: '0.5rem 0' }}>
-                ❌ Cannot connect to editor server
-              </p>
-              <p style={{ color: '#8b949e', fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                Make sure the editor server is running:
-              </p>
-              <pre style={{
-                background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px',
-                padding: '0.75rem', fontSize: '0.8rem', color: '#58a6ff', textAlign: 'left',
-                margin: '0.75rem 0'
-              }}>
-                cd editor/server{'\n'}npm run dev
-              </pre>
-              <button
-                onClick={() => window.location.reload()}
-                style={{
-                  padding: '0.6rem 1.5rem', background: '#238636', color: '#fff',
-                  border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem',
-                  marginTop: '0.5rem'
-                }}
-              >
-                🔄 Retry Connection
-              </button>
-            </>
-          ) : (
-            <>
-              <p style={{ color: '#8b949e', fontSize: '0.9rem', margin: '0.5rem 0' }}>
-                Connecting to editor server...
-              </p>
-              <div style={{
-                width: '28px', height: '28px', border: '3px solid #30363d',
-                borderTopColor: '#58a6ff', borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite', margin: '1rem auto'
-              }} />
-            </>
-          )}
-        </div>
-      </div>
+      <SessionPicker onSessionReady={(sid) => {
+        setSessionId(sid)
+        setSessionReady(true)
+        setTimeout(getFileTree, 500)
+      }} />
     )
   }
 
