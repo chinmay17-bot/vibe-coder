@@ -1,7 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-.git/
-editor/
-node_modules/
-*.log
