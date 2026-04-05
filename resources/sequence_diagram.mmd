@@ -1,0 +1,124 @@
+sequenceDiagram
+    actor User as User (Browser)
+    participant Client as React Client<br/>(Nginx :5173)
+    participant Orch as Orchestrator<br/>(Node.js :3000)
+    participant Yjs as Yjs WS Server<br/>(:1234)
+    participant SC as Session Container<br/>(Node.js :9000)
+    participant FS as /workspace<br/>(Docker Volume)
+    participant FA as FastAPI<br/>(:8000)
+    participant LG as LangGraph<br/>(AI Pipeline)
+
+    %% ─── SESSION CREATION ───
+    rect rgb(30, 40, 60)
+        Note over User,SC: Session Creation
+        User->>Client: Open http://localhost:5173
+        Client->>Orch: socket.io connect
+        User->>Client: Click "New Session"
+        Client->>Orch: emit session:new
+        Orch->>Orch: getFreePort()
+        Orch->>Orch: getNetworkName()
+        Orch->>SC: docker.createContainer() + start()
+        SC-->>Orch: container started
+        Orch->>SC: waitForPort (GET /files)
+        SC-->>Orch: 200 OK — ready
+        Orch-->>Client: emit session:status {ready, sessionId}
+        Client->>Client: setSessionReady(true)
+        Client->>Orch: GET /files (x-session-id header)
+        Orch->>SC: proxy GET /files
+        SC->>FS: readdir /workspace
+        FS-->>SC: file tree
+        SC-->>Orch: {tree: {}}
+        Orch-->>Client: {tree: {}}
+        Client->>Client: render file explorer
+    end
+
+    %% ─── FILE EDITING (CRDT) ───
+    rect rgb(30, 60, 40)
+        Note over User,Yjs: File Editing — CRDT Sync
+        User->>Client: click file in explorer
+        Client->>Orch: GET /files/content?path=...
+        Orch->>SC: proxy GET /files/content
+        SC->>FS: readFile()
+        FS-->>SC: file content
+        SC-->>Client: {content: "..."}
+        Client->>Yjs: WebSocket connect (sessionId/filePath)
+        Yjs-->>Client: sync existing Y.Doc state
+        Client->>Client: seed Y.Doc if empty
+        Client->>Client: bind Ace editor to Y.Doc
+
+        User->>Client: type in editor
+        Client->>Yjs: Yjs update op (keystroke)
+        Yjs->>Yjs: apply to Y.Doc
+        Yjs-->>Client: broadcast to other tabs
+        Yjs->>SC: scheduleFilePersist (debounced 500ms)
+        SC->>FS: writeFile()
+    end
+
+    %% ─── CURSOR PRESENCE ───
+    rect rgb(60, 30, 60)
+        Note over User,Orch: Cursor Presence
+        User->>Client: move cursor
+        Client->>Orch: emit cursor:move {file, row, col}
+        Orch->>Orch: broadcastToSession()
+        Orch-->>Client: emit cursor:update to other tabs
+        Client->>Client: render Ace marker at position
+    end
+
+    %% ─── TERMINAL ───
+    rect rgb(60, 40, 20)
+        Note over User,FS: Terminal
+        User->>Client: type command in terminal
+        Client->>Orch: emit terminal:write
+        Orch->>SC: forward terminal:write
+        SC->>SC: ptyProcess.write() — real bash
+        SC-->>Orch: emit terminal:data (output)
+        Orch-->>Client: forward terminal:data
+        Client->>Client: xterm.js renders output
+        SC->>FS: filesystem change (mkdir, touch etc.)
+        FS-->>SC: chokidar detects change
+        SC-->>Orch: emit file:refresh
+        Orch-->>Client: forward file:refresh
+        Client->>Orch: GET /files (refresh tree)
+        Orch->>SC: proxy GET /files
+        SC-->>Client: updated file tree
+    end
+
+    %% ─── AI AGENT PIPELINE ───
+    rect rgb(20, 50, 60)
+        Note over User,FS: AI Code Generation
+        User->>Client: type prompt in chat
+        Client->>Orch: emit ai:prompt
+        Orch->>SC: forward ai:prompt
+        SC->>SC: generateProjectName(prompt)
+        SC->>FS: mkdir /workspace/project-name/
+        SC-->>Client: emit ai:project-created
+        SC->>FA: POST /api/generate {prompt}
+
+        FA->>LG: compiled_graph.stream(inputs)
+
+        LG->>LG: planner_agent()<br/>prompt → Plan (JSON)
+        LG-->>FA: SSE {agent:planner, plan:{...}}
+        FA-->>SC: SSE stream
+        SC-->>Client: emit ai:response (planner)
+
+        LG->>LG: architect_agent()<br/>Plan → TaskPlan (JSON)
+        LG-->>FA: SSE {agent:architect, task_plan:{...}}
+        FA-->>SC: SSE stream
+        SC-->>Client: emit ai:response (architect)
+
+        loop for each file in TaskPlan
+            LG->>LG: coder_agent()<br/>generate code for one file
+            LG-->>FA: SSE {agent:coder, generated_files:{...}}
+            FA-->>SC: SSE stream
+            SC->>FS: writeFile() to /workspace
+            SC-->>Client: emit ai:file-created
+            SC-->>Client: emit ai:response (coder)
+        end
+
+        LG-->>FA: SSE {agent:system, status:complete}
+        FA-->>SC: SSE complete
+        SC-->>Client: emit ai:response (complete)
+        FS-->>SC: chokidar detects new files
+        SC-->>Client: emit file:refresh
+        Client->>Client: refresh file explorer
+    end
