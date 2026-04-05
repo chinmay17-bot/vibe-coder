@@ -93,10 +93,16 @@ function App() {
   const [chatVisible, setChatVisible] = useState(true)
   const [ctxMenu, setCtxMenu] = useState(null)
   const [inlineInput, setInlineInput] = useState(null)
+  const [isRunning, setIsRunning] = useState(false)
+  const [runOutput, setRunOutput] = useState('')
+  const [showRunOutput, setShowRunOutput] = useState(false)
+  const [previewVisible, setPreviewVisible] = useState(false)
+  const [renameInput, setRenameInput] = useState(null)
   const isSaved = true
 
   const deleteRef = useRef(null)
   const aceRef = useRef(null)
+  const fileSelectRef = useRef(null)
 
   const { ytext, synced } = useYjsDoc(sessionId, selectedFile, selectedFileContent)
   const { remoteCursors } = useCollabCursors(aceRef.current, selectedFile)
@@ -602,7 +608,7 @@ function App() {
                 <iframe
                   id="preview-iframe"
                   title="Live Preview"
-                  src={`${API}/preview${selectedFile}?t=${Date.now()}`}
+                  src={`${API}/preview${selectedFile}?t=${Date.now()}&sid=${sessionStorage.getItem('sessionId')}`}
                   style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
                   sandbox="allow-scripts allow-same-origin"
                 />

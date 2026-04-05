@@ -234,6 +234,26 @@ PROXY_PATHS.forEach(route => {
 
 // ── Preview proxy: forward raw content (not JSON) for live preview iframe ──
 app.use('/preview', async (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.query.sid;
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).send('Session not found');
+
+    // Strip sid from the forwarded URL
+    const urlObj = new URL(`http://localhost${req.originalUrl}`);
+    urlObj.searchParams.delete('sid');
+    const forwardUrl = `http://${session.host}:9000${urlObj.pathname}${urlObj.search}`;
+
+    try {
+        const upstream = await fetch(forwardUrl);
+        const contentType = upstream.headers.get('content-type') || 'text/plain';
+        res.status(upstream.status).setHeader('Content-Type', contentType);
+        const buffer = await upstream.arrayBuffer();
+        res.send(Buffer.from(buffer));
+    } catch (err) {
+        res.status(502).send(err.message);
+    }
+});
+app.use('/preview', async (req, res) => {
     const sessionId = req.headers['x-session-id'];
     const session = sessions.get(sessionId);
     if (!session) return res.status(404).send('Session not found');
