@@ -29,8 +29,9 @@ export function useYjsDoc(sessionId, filePath, initialContent) {
         docRef.current = doc;
         ytextRef.current = ytext;
 
+        const YJS_URL = (window.__ENV__ && window.__ENV__.VITE_YJS_URL) || 'ws://localhost:1234';
         const provider = new WebsocketProvider(
-            'ws://localhost:1234',
+            YJS_URL,
             docName,
             doc
         );

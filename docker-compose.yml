@@ -15,11 +15,11 @@ services:
     build:
       context: ./editor/client
       dockerfile: Dockerfile
-      args:
-        - VITE_ORCHESTRATOR_URL=${VITE_ORCHESTRATOR_URL:-http://localhost:3000}
-        - VITE_YJS_URL=${VITE_YJS_URL:-ws://localhost:1234}
     ports:
       - "5173:5173"
+    environment:
+      - VITE_ORCHESTRATOR_URL=${VITE_ORCHESTRATOR_URL:-http://localhost:3000}
+      - VITE_YJS_URL=${VITE_YJS_URL:-ws://localhost:1234}
     depends_on:
       - orchestrator
     restart: unless-stopped

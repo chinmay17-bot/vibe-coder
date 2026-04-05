@@ -72,7 +72,8 @@ function getFileName(filePath) {
 }
 
 // Helper: all REST calls go to orchestrator with session header
-const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
+import { ORCHESTRATOR_URL } from './config';
+const API = ORCHESTRATOR_URL;
 const apiFetch = (path, opts = {}) => {
   const sid = sessionStorage.getItem('sessionId');
   return fetch(`${API}${path}`, {

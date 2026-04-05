@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import socket from '../socket';
 import './SessionPicker.css';
 
-const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
+import { ORCHESTRATOR_URL } from '../config';
+
+const API = ORCHESTRATOR_URL;
 
 const SessionPicker = ({ onSessionReady }) => {
     const [sessions, setSessions] = useState([]);
