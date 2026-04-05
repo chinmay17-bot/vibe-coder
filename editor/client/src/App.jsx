@@ -498,6 +498,23 @@ function App() {
           ))}
           {selectedFile && (
             <div className="tab-bar-right">
+              {/* Active users on this file */}
+              {[...remoteCursors.entries()]
+                .filter(([, c]) => c.file === selectedFile)
+                .map(([socketId, cursor]) => (
+                  <span key={socketId} style={{
+                    background: cursor.color,
+                    color: '#fff',
+                    fontSize: '0.7rem',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    marginRight: '6px',
+                    fontFamily: 'monospace',
+                  }}>
+                    👤 {socketId.slice(0, 4)}
+                  </span>
+                ))
+              }
               <span className={`save-status ${isSaved ? 'saved' : 'unsaved'}`}>
                 {isSaved ? '✓ Saved' : '● Modified'}
               </span>
