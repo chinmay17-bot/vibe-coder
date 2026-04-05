@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import socket from '../socket';
 import './SessionPicker.css';
 
+const API = import.meta.env.VITE_ORCHESTRATOR_URL || 'http://localhost:3000';
+
 const SessionPicker = ({ onSessionReady }) => {
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -9,7 +11,7 @@ const SessionPicker = ({ onSessionReady }) => {
 
     const fetchSessions = async () => {
         try {
-            const res = await fetch('http://localhost:3000/sessions');
+            const res = await fetch(`${API}/sessions`);
             const data = await res.json();
             setSessions(data.sessions || []);
         } catch {
@@ -49,7 +51,7 @@ const SessionPicker = ({ onSessionReady }) => {
 
     const handleDelete = async (e, sessionId) => {
         e.stopPropagation();
-        await fetch(`http://localhost:3000/sessions/${sessionId}`, { method: 'DELETE' });
+        await fetch(`${API}/sessions/${sessionId}`, { method: 'DELETE' });
         fetchSessions();
     };
 
