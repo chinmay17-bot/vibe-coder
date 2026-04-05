@@ -106,7 +106,7 @@ function App() {
   const fileSelectRef = useRef(null)
 
   const { ytext, synced } = useYjsDoc(sessionId, selectedFile, selectedFileContent)
-  const { remoteCursors } = useCollabCursors(aceRef.current, selectedFile)
+  const { remoteCursors } = useCollabCursors(aceRef, selectedFile)
 
   // Bind Yjs text to the Ace editor
   useEffect(() => {

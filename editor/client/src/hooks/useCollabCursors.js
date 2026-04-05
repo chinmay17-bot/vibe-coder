@@ -18,12 +18,13 @@ function getColor(socketId) {
     return colorMap.get(socketId);
 }
 
-export function useCollabCursors(aceEditor, selectedFile) {
+export function useCollabCursors(aceEditorRef, selectedFile) {
     const [remoteCursors, setRemoteCursors] = useState(new Map());
     const markersRef = useRef(new Map());
 
     // Broadcast our cursor position
     useEffect(() => {
+        const aceEditor = aceEditorRef?.current;
         if (!aceEditor || !selectedFile) return;
         const selection = aceEditor.getSelection();
         const onCursorChange = () => {
@@ -32,7 +33,7 @@ export function useCollabCursors(aceEditor, selectedFile) {
         };
         selection.on('changeCursor', onCursorChange);
         return () => selection.off('changeCursor', onCursorChange);
-    }, [aceEditor, selectedFile]);
+    }, [aceEditorRef?.current, selectedFile]);
 
     // Listen for remote cursor updates
     useEffect(() => {
@@ -54,6 +55,7 @@ export function useCollabCursors(aceEditor, selectedFile) {
 
     // Render markers in Ace
     useEffect(() => {
+        const aceEditor = aceEditorRef?.current;
         if (!aceEditor) return;
         const aceSession = aceEditor.getSession();
         const Range = ace.require('ace/range').Range;
@@ -72,7 +74,7 @@ export function useCollabCursors(aceEditor, selectedFile) {
             const markerId = aceSession.addMarker(range, className, 'text', true);
             markersRef.current.set(socketId, markerId);
         }
-    }, [remoteCursors, aceEditor, selectedFile]);
+    }, [remoteCursors, aceEditorRef?.current, selectedFile]);
 
     return { remoteCursors };
 }
