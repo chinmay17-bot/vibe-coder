@@ -113,8 +113,10 @@ function App() {
     if (!aceRef.current || !ytext || !synced) return
     const editor = aceRef.current
     const aceSession = editor.getSession()
+    const doc = aceSession.getDocument()
     let isApplyingRemote = false
 
+    // Set initial content
     const initial = ytext.toString()
     if (aceSession.getValue() !== initial) {
       isApplyingRemote = true
@@ -122,27 +124,50 @@ function App() {
       isApplyingRemote = false
     }
 
-    const onYjsUpdate = () => {
+    // Yjs → Ace: apply remote changes using positional deltas
+    const onYjsUpdate = (event) => {
       if (isApplyingRemote) return
-      const yjsVal = ytext.toString()
-      if (aceSession.getValue() === yjsVal) return
       isApplyingRemote = true
-      const pos = editor.getCursorPosition()
-      aceSession.setValue(yjsVal)
-      editor.moveCursorToPosition(pos)
+      try {
+        let index = 0
+        event.changes.forEach(change => {
+          if (change.retain) {
+            index += change.retain
+          } else if (change.insert) {
+            const pos = doc.indexToPosition(index, 0)
+            aceSession.insert(pos, change.insert)
+            index += change.insert.length
+          } else if (change.delete) {
+            const start = doc.indexToPosition(index, 0)
+            const end = doc.indexToPosition(index + change.delete, 0)
+            aceSession.remove({ start, end })
+          }
+        })
+      } catch {
+        // Fallback for edge cases
+        const pos = editor.getCursorPosition()
+        aceSession.setValue(ytext.toString())
+        editor.moveCursorToPosition(pos)
+      }
       isApplyingRemote = false
     }
     ytext.observe(onYjsUpdate)
 
-    const onAceChange = () => {
+    // Ace → Yjs: convert Ace delta to Yjs positional ops
+    const onAceChange = (delta) => {
       if (isApplyingRemote) return
-      const aceVal = aceSession.getValue()
-      if (aceVal === ytext.toString()) return
       isApplyingRemote = true
-      ytext.doc.transact(() => {
-        ytext.delete(0, ytext.length)
-        ytext.insert(0, aceVal)
-      })
+      try {
+        const start = doc.positionToIndex(delta.start, 0)
+        if (delta.action === 'insert') {
+          ytext.insert(start, delta.lines.join('\n'))
+        } else if (delta.action === 'remove') {
+          const length = delta.lines.join('\n').length
+          ytext.delete(start, length)
+        }
+      } catch (e) {
+        console.warn('[Yjs] delta error:', e.message)
+      }
       isApplyingRemote = false
     }
     aceSession.on('change', onAceChange)
