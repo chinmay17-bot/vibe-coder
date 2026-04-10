@@ -129,6 +129,35 @@ function App() {
       if (isApplyingRemote) return
       isApplyingRemote = true
       try {
+        // Save cursor position as a text index before applying changes
+        const cursorIndex = doc.positionToIndex(editor.getCursorPosition(), 0)
+        let adjustedIndex = cursorIndex
+
+        // Calculate how much the cursor needs to shift based on remote changes
+        let remoteOffset = 0
+        event.changes.forEach(change => {
+          if (change.retain) {
+            remoteOffset += change.retain
+          } else if (change.insert) {
+            // If insertion is before cursor, shift cursor right
+            if (remoteOffset <= cursorIndex) {
+              adjustedIndex += change.insert.length
+            }
+            remoteOffset += change.insert.length
+          } else if (change.delete) {
+            // If deletion is before cursor, shift cursor left
+            if (remoteOffset < cursorIndex) {
+              const deleteEnd = remoteOffset + change.delete
+              if (deleteEnd <= cursorIndex) {
+                adjustedIndex -= change.delete
+              } else {
+                adjustedIndex -= cursorIndex - remoteOffset
+              }
+            }
+          }
+        })
+
+        // Apply the changes to Ace
         let index = 0
         event.changes.forEach(change => {
           if (change.retain) {
@@ -143,6 +172,10 @@ function App() {
             aceSession.remove({ start, end })
           }
         })
+
+        // Restore cursor at adjusted position
+        const newPos = doc.indexToPosition(Math.max(0, adjustedIndex), 0)
+        editor.moveCursorToPosition(newPos)
       } catch {
         // Fallback for edge cases
         const pos = editor.getCursorPosition()
