@@ -1,0 +1,145 @@
+/* Global reset and typography */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.5;
+    background: linear-gradient(135deg, #f0f4ff, #e6e9ff);
+    color: #333;
+}
+
+/* App container */
+#app {
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+
+/* Header */
+#app h1 {
+    text-align: center;
+    color: #4a90e2;
+    margin-bottom: 1.5rem;
+    font-size: 2rem;
+}
+
+/* Form styling */
+#task-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+#task-form input[type="text"] {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 2px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+#task-form input[type="text"]:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74,144,226,0.2);
+}
+
+#task-form button {
+    padding: 0.75rem 1.5rem;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s;
+}
+
+#task-form button:hover {
+    background: #357ab8;
+}
+
+#task-form button:active {
+    transform: scale(0.97);
+}
+
+/* Task list */
+#task-list {
+    list-style: none;
+    padding: 0;
+}
+
+/* Individual task item */
+.task-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e2e8f0;
+    transition: background-color 0.2s ease;
+}
+
+.task-item:hover {
+    background-color: #f9fafb;
+}
+
+/* Completed tasks */
+.task-item.completed {
+    text-decoration: line-through;
+    color: #a0aec0;
+}
+
+/* Delete button */
+.delete-btn {
+    background: transparent;
+    border: none;
+    color: #e53e3e;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    transition: opacity 0.2s ease;
+}
+
+.delete-btn:hover {
+    opacity: 0.7;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    #app {
+        margin: 1rem;
+        padding: 1rem;
+    }
+
+    #app h1 {
+        font-size: 1.5rem;
+    }
+
+    #task-form {
+        flex-direction: column;
+    }
+
+    #task-form button {
+        width: 100%;
+    }
+
+    .task-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .delete-btn {
+        align-self: flex-end;
+    }
+}

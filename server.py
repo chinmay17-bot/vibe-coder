@@ -101,6 +101,14 @@ async def event_stream(prompt: str):
                             if new_files:
                                 event_data["generated_files"] = new_files
                                 sent_files.update(new_files.keys())
+                                
+                                # Write generated files locally to editor/server/user
+                                user_dir = Path(__file__).parent / "editor" / "server" / "user"
+                                user_dir.mkdir(parents=True, exist_ok=True)
+                                for filename, content in new_files.items():
+                                    file_path = user_dir / filename
+                                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                                    file_path.write_text(content, encoding="utf-8")
 
                     event_queue.put(event_data)
         except Exception as e:
