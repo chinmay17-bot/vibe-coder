@@ -1,18 +1,18 @@
-# 🚀 Vibe Coder: AI Agentic IDE
+#  Vibe Coder: AI Agentic IDE
 
 **Vibe Coder** is a state-of-the-art AI-powered workspace that transforms natural language prompts into fully functional code projects. Unlike static code generators, Vibe Coder uses a **multi-agent orchestration** to plan, architect, and implement software while providing a real-time collaborative editor environment.
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 The system is built on two primary pillars that communicate seamlessly:
 
 ### 1. The AI Agent Team (Backend)
 Powered by **LangGraph** and **Groq (LLMs)**:
-- **🧠 Planner Agent**: Analyzes the user's prompt and creates a project roadmap.
-- **📐 Architect Agent**: Translates the roadmap into specific files and engineering tasks.
-- **💻 Coder Agent**: Implements the logic file-by-file with multi-agent consistency.
+- ** Planner Agent**: Analyzes the user's prompt and creates a project roadmap.
+- ** Architect Agent**: Translates the roadmap into specific files and engineering tasks.
+- ** Coder Agent**: Implements the logic file-by-file with multi-agent consistency.
 
 ### 2. The Smart Editor (Frontend/Node.js)
 A robust workspace for reviewing and running generated code:
@@ -23,15 +23,15 @@ A robust workspace for reviewing and running generated code:
 
 ---
 
-## ✨ Features (Latest Branch)
+## Features (Latest Branch)
 
-- **💾 Local Persistence**: Projects are automatically saved to `editor/server/user/` as they are generated.
-- **⚡ Supercharged SSE**: Real-time visibility into agent logs and codebase evolution.
-- **🛠️ Zero-Config Preview**: Instant live-reloading for web projects.
+- ** Local Persistence**: Projects are automatically saved to `editor/server/user/` as they are generated.
+- ** Supercharged SSE**: Real-time visibility into agent logs and codebase evolution.
+- ** Zero-Config Preview**: Instant live-reloading for web projects.
 
 ---
 
-## 🐳 Containerization & Deployment
+## Containerization & Deployment
 
 Vibe Coder is fully containerized for consistent development and scalable production hosting.
 
@@ -45,7 +45,7 @@ This spawns:
 - `orchestrator`: Manages workspace sessions (Port 3000)
 - `client`: React-based editor UI (Port 5173)
 
-### ☁️ AWS Deployment (Production)
+### AWS Deployment (Production)
 We host our containers on **AWS** using a scalable container-orchestration strategy:
 
 1. **Registry (ECR)**:
@@ -64,7 +64,7 @@ We host our containers on **AWS** using a scalable container-orchestration strat
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - **Python 3.10+** & **Node.js 18+**
@@ -87,7 +87,7 @@ We host our containers on **AWS** using a scalable container-orchestration strat
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 vibe-coder/
@@ -101,4 +101,3 @@ vibe-coder/
 ```
 
 ---
-*Built with ❤️ for the next generation of developers.*
