@@ -291,6 +291,14 @@ function App() {
     if (!selectedFile) return
     try {
       const response = await apiFetch(`/files/content?path=${selectedFile}`)
+      if (response.status === 404) {
+        // File was deleted — close the tab
+        setOpenTabs(prev => prev.filter(t => t !== selectedFile))
+        setSelectedFile('')
+        setCode('')
+        setSelectedFileContent('')
+        return
+      }
       const result = await response.json()
       setSelectedFileContent(result.content)
     } catch (err) {

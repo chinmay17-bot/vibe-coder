@@ -123,10 +123,23 @@ def coder_agent(state: dict) -> dict:
         {"role": "user", "content": user_prompt}
     ])
 
-    # Extract the generated code and store it for future context
+    # Extract the generated code — try multiple patterns
+    code = None
+    # Pattern 1: standard fenced code block
     code_match = re.search(r'```\w*\s*\n([\s\S]*?)```', response.content)
     if code_match:
-        coder_state.generated_files[current_task.filepath] = code_match.group(1).strip()
+        code = code_match.group(1).strip()
+    # Pattern 2: code block without language specifier
+    if not code:
+        code_match = re.search(r'```([\s\S]*?)```', response.content)
+        if code_match:
+            code = code_match.group(1).strip()
+    # Pattern 3: if no code block found, use entire response (strip markdown headers)
+    if not code:
+        code = re.sub(r'^###.*\n', '', response.content).strip()
+
+    if code:
+        coder_state.generated_files[current_task.filepath] = code
 
     coder_state.current_step_idx += 1
     
