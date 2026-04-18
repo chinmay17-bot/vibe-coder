@@ -210,6 +210,23 @@ app.delete('/sessions/:sessionId', async (req, res) => {
 // ── HTTP proxy: forward REST calls to the right container ──
 // Client sends header X-Session-Id on every request
 const PROXY_PATHS = ['/files'];
+
+// ── Direct proxy to FastAPI for code execution ──
+app.use('/api', async (req, res) => {
+    const FASTAPI_URL = process.env.FASTAPI_URL || 'http://fastapi:8000';
+    const url = `${FASTAPI_URL}${req.originalUrl}`;
+    try {
+        const fetchOpts = { method: req.method, headers: { 'Content-Type': 'application/json' } };
+        if (req.method !== 'GET') fetchOpts.body = JSON.stringify(req.body);
+        const upstream = await fetch(url, fetchOpts);
+        const contentType = upstream.headers.get('content-type') || 'application/json';
+        res.status(upstream.status).setHeader('Content-Type', contentType);
+        const buffer = await upstream.arrayBuffer();
+        res.send(Buffer.from(buffer));
+    } catch (err) {
+        res.status(502).json({ error: err.message });
+    }
+});
 PROXY_PATHS.forEach(route => {
     app.use(route, async (req, res) => {
         const sessionId = req.headers['x-session-id'];

@@ -445,7 +445,7 @@ function App() {
     setRunOutput(`⏳ Running ${getFileName(selectedFile)}...`)
     try {
       const currentCode = aceRef.current ? aceRef.current.getSession().getValue() : code
-      const res = await fetch('http://localhost:8000/api/execute', {
+      const res = await apiFetch('/api/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: currentCode, language })
